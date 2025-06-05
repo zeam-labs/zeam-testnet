@@ -1,33 +1,21 @@
-/models/
-
-# Binaries
 /bin/
 /build/
-
-# Cosmos SDK data & config
 /data/
-/config/
 /node_data/
-/*.db
-/*.log
-
-# Go build artifacts
+/config/
 *.exe
 *.dll
 *.so
 *.dylib
-
-# IDE/editor files
 *.swp
 *.bak
+*.db
+*.log
 .vscode/
 .idea/
 *.iml
-
-# OS junk
 .DS_Store
 Thumbs.db
-
-# Kubernetes / Docker (if you have any manifests)
+/llm/*.bin
 *.yaml
 *.yml
