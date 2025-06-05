@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"zeam/app"
+	"zeam/core/spawn/agent_spawner"
+	"zeam/core/spawn/presence_spawner"
 	"zeam/ipfs"
-	"zeam/spawn/agent_spawner"
-	"zeam/spawm/presence_spawner"
 )
 
 var runtime *app.App
