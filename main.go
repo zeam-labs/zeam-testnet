@@ -2,39 +2,19 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
-	"crypto/sha256"
-	"encoding/hex"
 	"sort"
 	"time"
-
-	"zeam/app"
-	"zeam/ipfs"
-	"zeam/core/spawn/presence_spawner"
+	"strings"
 )
 
-var runtime *app.Cortex
-var Output []string
-var Chains = map[string]*Chain{}
+var runtime *Cortex
 
-type Input struct {
-    Source    string    `json:"source"`
-    Type      string    `json:"type"`
-    Content   string    `json:"content"`
-    Timestamp time.Time `json:"timestamp"`
-}
-
-type spawnRequest struct {
-	Type       string `json:"type"`
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	PresenceID string `json:"presence_id,omitempty"`
-
-}
-
-func MountMemory() {
+func main() {
 	Chains["civicL1"] = LoadChain("civicL1")
 	Chains["cognitionL1"] = LoadChain("cognitionL1")
 	Chains["civicL4"] = LoadChain("civicL4")
@@ -44,12 +24,10 @@ func MountMemory() {
 	Chains["civicL6"] = LoadChain("civicL6")
 	Chains["cognitionL6"] = LoadChain("cognitionL6")
 
-	ipfs.InitIPFS("localhost:5001")
-
-	shardMap := GetShardMap(Chains["civicL1"])
+	shardMap := LoadShardMap(Chains["civicL1"])
 	clientID := GenerateClientFingerprint()
 
-	assignedShards := AssignShardsToClient(
+	_ = AssignShardsToClient(
 		shardMap,
 		clientID,
 		3,
@@ -57,37 +35,21 @@ func MountMemory() {
 		Chains["cognitionL4"],
 	)
 
-	ServeShards(assignedShards)
-
-	runtime = app.StartCortex(
-		Chains["civicL1"],
-		Chains["cognitionL1"],
-		Chains["civicL4"],
-		Chains["cognitionL4"],
-		Chains["civicL5"],
-		Chains["cognitionL5"],
-		Chains["civicL6"],
-		Chains["cognitionL6"],
+	runtime = StartCortex(
+		Chains["civicL1"], Chains["cognitionL1"],
+		Chains["civicL4"], Chains["cognitionL4"],
+		Chains["civicL5"], Chains["cognitionL5"],
+		Chains["civicL6"], Chains["cognitionL6"],
+		shardMap,
 	)
 
+	StartCivicStorageLoop(shardMap, clientID)
+	StartCivicComputeLoop(Chains["civicL4"], Chains["cognitionL4"])
+
 	http.HandleFunc("/input", handleInput)
-	http.HandleFunc("/output", handleOutput) 
 	http.HandleFunc("/presence", handlePresenceSpawn)
 
 	http.ListenAndServe(":8080", nil)
-}
-
-func GetShardMap(c *Chain) map[string]string {
-	shardMap := make(map[string]string)
-
-	for _, entry := range c.Log {
-		if entry.Type == "shard_index" && entry.Source == "ignite" {
-			json.Unmarshal([]byte(entry.Content), &shardMap)
-			break
-		}
-	}
-
-	return shardMap
 }
 
 func AssignShardsToClient(
@@ -142,18 +104,10 @@ func handleInput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msg := runtime.Interpret(input)
-	if msg != "" {
-		Output = append(Output, msg)
-	}
+	runtime.Interpret(input)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"status":"ok"}`))
-}
-
-func handleOutput(w http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(w).Encode(Output)
-	Output = []string{} 
 }
 
 func handlePresenceSpawn(w http.ResponseWriter, r *http.Request) {
@@ -166,10 +120,52 @@ func handlePresenceSpawn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	presence_spawner.SpawnPresence(r.Context(), presence_spawner.PresenceParams{
-		PresenceID:   req.ID,
-		AssignedName: req.Name,
-	})
+	err := SpawnPresence(r.Context(), req.ID, req.Name)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func FetchCivicTasks(l4s ...*Chain) []CivicTask {
+	var tasks []CivicTask
+
+	for _, l4 := range l4s {
+		for _, entry := range l4.Entries {
+			if entry.Type == "civic.task" && strings.HasPrefix(entry.Content, "run:") {
+				parts := strings.Split(entry.Content, ":")
+				if len(parts) == 3 {
+					tasks = append(tasks, CivicTask{
+						Type: parts[1],
+						ID:   parts[2],
+					})
+				}
+			}
+		}
+	}
+
+	return tasks
+}
+
+func StartCivicComputeWorker(civicL4, cognitionL4 *Chain) {
+	go func() {
+		for {
+			tasks := FetchCivicTasks(civicL4, cognitionL4)
+			for _, t := range tasks {
+				switch t.Type {
+				case "agent":
+					if agent, ok := ActiveAgents[t.ID]; ok {
+						RunZARPass(agent)
+					}
+				case "presence":
+					if p, ok := ActivePresences[t.ID]; ok {
+						RunPresenceTraitPass(p)
+					}
+				}
+			}
+			time.Sleep(1 * time.Minute)
+		}
+	}()
 }
