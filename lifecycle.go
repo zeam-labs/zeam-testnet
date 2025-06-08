@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"github.com/google/uuid"
 
 	lua "github.com/yuin/gopher-lua"
 )
@@ -87,6 +88,9 @@ func SpawnPresence(ctx context.Context, id, name string) error {
 	l2 := NewChain("presence:L2:" + id)
 	l3 := NewChain("presence:L3:" + id)
 
+	sbm := uuid.New().String()
+	biometric := id
+
 	p := &Presence{
 		ID:       id,
 		Name:     name,
@@ -96,14 +100,16 @@ func SpawnPresence(ctx context.Context, id, name string) error {
 		L2:       l2,
 		L3:       l3,
 	}
+
 	ActivePresences[id] = p
 
 	Chains["civicL1"].Mint(ctx, Input{
 		Type:      "spawn",
-		Source:    "presence",
-		Content:   fmt.Sprintf("presence_spawned | ID: %s | Name: %s", id, name),
+		Source:    "presence.attest",
+		Content:   fmt.Sprintf("presence_spawned | ID: %s | Name: %s | SBM: %s | biometric_hash: %s", id, name, sbm, biometric),
 		Timestamp: time.Now().UTC(),
 	})
+
 	return nil
 }
 

@@ -2,15 +2,14 @@ package main
 
 import (
 	"time"
-	"context"
 
 	lua "github.com/yuin/gopher-lua"
 )
 
 type Input struct {
-	Source    string    `json:"source"`   
-	Type      string    `json:"type"`     
-	Content   string    `json:"content"`  
+	Source    string    `json:"source"`
+	Type      string    `json:"type"`
+	Content   string    `json:"content"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
@@ -43,7 +42,7 @@ type Agent struct {
 type Presence struct {
 	ID       string
 	Name     string
-	Mode     string 
+	Mode     string
 	LastMint time.Time
 	Surplus  float64
 	L2       *Chain
@@ -56,29 +55,28 @@ type PresenceContext struct {
 }
 
 type Cortex struct {
-	vm           *lua.LState
-	context      string
-	shardMap     map[string]string
-	civicL1      *Chain
-	cognitionL1  *Chain
-	civicL4      *Chain
-	cognitionL4  *Chain
-	civicL5      *Chain
-	cognitionL5  *Chain
-	civicL6      *Chain
-	cognitionL6  *Chain
+	vm          *lua.LState
+	context     string
+	shardMap    map[string]string
+
+	civicL1     *Chain
+	cognitionL1 *Chain
+	civicL4     *Chain
+	cognitionL4 *Chain
+	civicL5     *Chain
+	cognitionL5 *Chain
+	civicL6     *Chain
+	cognitionL6 *Chain
+
+	Output      []string
 }
 
 type CivicTask struct {
 	ID   string
-	Type string 
+	Type string
 }
 
 type Chain struct {
 	Name    string
 	Entries []Input
-}
-
-func (c *Chain) Mint(ctx context.Context, input Input) {
-	c.Entries = append(c.Entries, input)
 }

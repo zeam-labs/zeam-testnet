@@ -5,16 +5,26 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"sort"
-	"time"
 	"strings"
+	"time"
 )
 
 var runtime *Cortex
 
 func main() {
+	fmt.Println("Starting ZEAM...")
+
+	if isGenesisNeeded() {
+		fmt.Println("No civicL1 chain found. Running genesis...")
+		genesis()
+	} else {
+		fmt.Println("Genesis already complete. Skipping.")
+	}
+
 	Chains["civicL1"] = LoadChain("civicL1")
 	Chains["cognitionL1"] = LoadChain("cognitionL1")
 	Chains["civicL4"] = LoadChain("civicL4")
@@ -48,8 +58,122 @@ func main() {
 
 	http.HandleFunc("/input", handleInput)
 	http.HandleFunc("/presence", handlePresenceSpawn)
+	http.HandleFunc("/output", handleOutput)
+	http.HandleFunc("/compute", handleCivicCompute)
+	http.HandleFunc("/storage", handleCivicStorage)
 
-	http.ListenAndServe(":8080", nil)
+	fmt.Println("ZEAM ignition complete.")
+	http.ListenAndServe("0.0.0.0:8080", nil)
+}
+
+func handleInput(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	body, _ := io.ReadAll(r.Body)
+	defer r.Body.Close()
+
+	var input Input
+	_ = json.Unmarshal(body, &input)
+
+	runtime.Interpret(input)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"status":"ok"}`))
+}
+
+func handlePresenceSpawn(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	body, _ := io.ReadAll(r.Body)
+	defer r.Body.Close()
+
+	var req spawnRequest
+	_ = json.Unmarshal(body, &req)
+
+	id := AttestBiometric([]byte(req.ID))
+	if id != "" {
+		SpawnPresence(r.Context(), id, "Presence-"+id[:6])
+		json.NewEncoder(w).Encode(map[string]string{
+			"id":   id,
+			"name": "Presence-" + id[:6],
+		})
+		return
+	}
+
+	SpawnPresence(r.Context(), req.ID, req.Name)
+	json.NewEncoder(w).Encode(map[string]string{
+		"id":   req.ID,
+		"name": req.Name,
+	})
+}
+
+func handleOutput(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+
+	if runtime == nil || runtime.Output == nil {
+		json.NewEncoder(w).Encode([]string{})
+		return
+	}
+
+	json.NewEncoder(w).Encode(runtime.Output)
+}
+
+func handleCivicCompute(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func handleCivicStorage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func AttestBiometric(input []byte) string {
+	hash := string(input)
+
+	for _, entry := range Chains["civicL1"].Entries {
+		if entry.Type == "spawn" && strings.Contains(entry.Content, hash) {
+			parts := strings.Split(entry.Content, "|")
+			for _, p := range parts {
+				if strings.Contains(p, "ID:") {
+					id := strings.TrimSpace(strings.Split(p, ":")[1])
+					return id
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func AssignShardsToClient(
@@ -91,81 +215,4 @@ func AssignShardsToClient(
 	}
 
 	return assigned
-}
-
-func handleInput(w http.ResponseWriter, r *http.Request) {
-	body, _ := io.ReadAll(r.Body)
-	defer r.Body.Close()
-
-	var input Input
-	err := json.Unmarshal(body, &input)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	runtime.Interpret(input)
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status":"ok"}`))
-}
-
-func handlePresenceSpawn(w http.ResponseWriter, r *http.Request) {
-	body, _ := io.ReadAll(r.Body)
-	defer r.Body.Close()
-
-	var req spawnRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	err := SpawnPresence(r.Context(), req.ID, req.Name)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-}
-
-func FetchCivicTasks(l4s ...*Chain) []CivicTask {
-	var tasks []CivicTask
-
-	for _, l4 := range l4s {
-		for _, entry := range l4.Entries {
-			if entry.Type == "civic.task" && strings.HasPrefix(entry.Content, "run:") {
-				parts := strings.Split(entry.Content, ":")
-				if len(parts) == 3 {
-					tasks = append(tasks, CivicTask{
-						Type: parts[1],
-						ID:   parts[2],
-					})
-				}
-			}
-		}
-	}
-
-	return tasks
-}
-
-func StartCivicComputeWorker(civicL4, cognitionL4 *Chain) {
-	go func() {
-		for {
-			tasks := FetchCivicTasks(civicL4, cognitionL4)
-			for _, t := range tasks {
-				switch t.Type {
-				case "agent":
-					if agent, ok := ActiveAgents[t.ID]; ok {
-						RunZARPass(agent)
-					}
-				case "presence":
-					if p, ok := ActivePresences[t.ID]; ok {
-						RunPresenceTraitPass(p)
-					}
-				}
-			}
-			time.Sleep(1 * time.Minute)
-		}
-	}()
 }

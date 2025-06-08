@@ -10,6 +10,7 @@ import (
 	"time"
 	"encoding/hex"
 	"encoding/json"
+	"context"
 )
 
 var CORE_CONTEXT string
@@ -18,6 +19,7 @@ var ActiveAgents   = map[string]*Agent{}
 var ActivePresences = map[string]*Presence{}
 var Chains = map[string]*Chain{}
 var Vaults = map[string]float64{}
+
 
 func hashBytes(data []byte) string {
 	h := sha256.Sum256(data)
@@ -164,4 +166,13 @@ func StartCivicComputeLoop(civicL4, cognitionL4 *Chain) {
 			time.Sleep(30 * time.Second) // Throttle for 2% CPU profile
 		}
 	}()
+}
+
+func isGenesisNeeded() bool {
+	_, err := os.Stat("./civicL1.json")
+	return os.IsNotExist(err)
+}
+
+func (c *Chain) Mint(ctx context.Context, input Input) {
+	c.Entries = append(c.Entries, input)
 }

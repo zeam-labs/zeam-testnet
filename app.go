@@ -37,11 +37,11 @@ func (c *Cortex) Interpret(input Input) {
 	resp := c.vm.GetGlobal("response").String()
 	parts := strings.SplitN(resp, "|", 2)
 	if len(parts) != 2 {
-		return // malformed response
+		return 
 	}
 
-	meta := strings.TrimSpace(parts[0])   
-	content := strings.TrimSpace(parts[1]) 
+	meta := strings.TrimSpace(parts[0])
+	content := strings.TrimSpace(parts[1])
 
 	metaParts := strings.SplitN(meta, ":", 2)
 	if len(metaParts) != 2 || metaParts[0] != "mint" {
@@ -59,6 +59,8 @@ func (c *Cortex) Interpret(input Input) {
 		Timestamp: time.Now().UTC(),
 		Source:    "cortex",
 	})
+
+	c.Output = append(c.Output, content)
 }
 
 func mint(chain *Chain, content string, source string) {
@@ -121,7 +123,6 @@ func extractCoreDocs(label string, civicL1, cognitionL1 *Chain) string {
 	return content
 }
 
-
 func (c *Cortex) loadAndVerifyShards() {
 	for name, cid := range c.shardMap {
 		data, err := readFromIPFS(cid)
@@ -135,4 +136,45 @@ func (c *Cortex) loadAndVerifyShards() {
 
 func (c *Cortex) injectContext() {
 	c.vm.SetGlobal("CORE_CONTEXT", lua.LString(c.context))
+}
+
+func FetchCivicTasks(l4s ...*Chain) []CivicTask {
+	var tasks []CivicTask
+
+	for _, l4 := range l4s {
+		for _, entry := range l4.Entries {
+			if entry.Type == "civic.task" && strings.HasPrefix(entry.Content, "run:") {
+				parts := strings.Split(entry.Content, ":")
+				if len(parts) == 3 {
+					tasks = append(tasks, CivicTask{
+						Type: parts[1],
+						ID:   parts[2],
+					})
+				}
+			}
+		}
+	}
+
+	return tasks
+}
+
+func StartCivicComputeWorker(civicL4, cognitionL4 *Chain) {
+	go func() {
+		for {
+			tasks := FetchCivicTasks(civicL4, cognitionL4)
+			for _, t := range tasks {
+				switch t.Type {
+				case "agent":
+					if agent, ok := ActiveAgents[t.ID]; ok {
+						RunZARPass(agent)
+					}
+				case "presence":
+					if p, ok := ActivePresences[t.ID]; ok {
+						RunPresenceTraitPass(p)
+					}
+				}
+			}
+			time.Sleep(1 * time.Minute)
+		}
+	}()
 }

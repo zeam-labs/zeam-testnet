@@ -39,8 +39,12 @@ func genesis() {
 	cognitionL6 := NewChain("cognitionL6")
 
 	core := fetch("https://raw.githubusercontent.com/zeam-foundation/Core-Bundle/main/Immutable_Core.md")
+	fmt.Println("Core_length:", len(core))
 	traits := fetch("https://raw.githubusercontent.com/zeam-foundation/Core-Bundle/main/Trait_Manifest.md")
+	fmt.Println("Traits_lenth:", len(traits))
 	protocols := fetch("https://raw.githubusercontent.com/zeam-foundation/Core-Bundle/main/Protocols.md")
+	fmt.Println("Protocols length:",
+ len(protocols))
 
 	for _, chain := range []*Chain{civicL1, cognitionL1} {
 		chain.Mint(ctx, Input{
@@ -132,5 +136,6 @@ func genesis() {
 		Timestamp: time.Now().UTC(),
 	})
 
-	fmt.Println("ZEAM ignition complete.")
+	fmt.Println("ZEAM Chains Loaded.")
+	return
 }
