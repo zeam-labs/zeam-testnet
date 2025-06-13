@@ -3,14 +3,15 @@ package main
 import (
 	"time"
 
-	lua "github.com/yuin/gopher-lua"
+	"github.com/tetratelabs/wazero"
 )
 
 type Input struct {
-	Source    string    `json:"source"`
-	Type      string    `json:"type"`
 	Content   string    `json:"content"`
+	Source    string    `json:"source"`
 	Timestamp time.Time `json:"timestamp"`
+	ChainKey  string    `json:"chain_key"`
+	Type      string    `json:"type"`
 }
 
 type spawnRequest struct {
@@ -55,9 +56,11 @@ type PresenceContext struct {
 }
 
 type Cortex struct {
-	vm          *lua.LState
 	context     string
 	shardMap    map[string]string
+	wasmMap     map[string]string
+	ShardReader ShardReader
+	Output      []string
 
 	civicL1     *Chain
 	cognitionL1 *Chain
@@ -68,7 +71,9 @@ type Cortex struct {
 	civicL6     *Chain
 	cognitionL6 *Chain
 
-	Output      []string
+	ggufModel    []byte
+	wasmCompiled wazero.CompiledModule
+	wasmRuntime  wazero.Runtime
 }
 
 type CivicTask struct {
@@ -79,4 +84,9 @@ type CivicTask struct {
 type Chain struct {
 	Name    string
 	Entries []Input
+}
+
+type ShardReader interface {
+	LoadNext() ([]byte, error)
+	Reset()
 }

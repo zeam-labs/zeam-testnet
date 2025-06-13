@@ -25,7 +25,7 @@ func fetch(url string) string {
 	return string(body)
 }
 
-func genesis() {
+func genesis() (map[string]string, map[string]string) {
 	ctx := context.Background()
 
 	civicL1 := NewChain("civicL1")
@@ -43,10 +43,16 @@ func genesis() {
 	traits := fetch("https://raw.githubusercontent.com/zeam-foundation/Core-Bundle/main/Trait_Manifest.md")
 	fmt.Println("Traits_lenth:", len(traits))
 	protocols := fetch("https://raw.githubusercontent.com/zeam-foundation/Core-Bundle/main/Protocols.md")
-	fmt.Println("Protocols length:",
- len(protocols))
+	fmt.Println("Protocols length:", len(protocols))
 
-	for _, chain := range []*Chain{civicL1, cognitionL1} {
+	//protocolsBytes, _ := os.ReadFile("zeam/protocols/Protocols.md")
+	//protocols := string(protocolsBytes)
+	//fmt.Println("Protocols length:", len(protocols))
+
+	for _, chain := range []*Chain{
+		civicL1, civicL4, civicL5, civicL6,
+		cognitionL1, cognitionL4, cognitionL5, cognitionL6,
+	} {
 		chain.Mint(ctx, Input{
 			Content:   fmt.Sprintf("core_hash:%s\n%s", hashString(core), core),
 			Source:    "ignite",
@@ -89,6 +95,10 @@ func genesis() {
 	shardIndex := make(map[string]string)
 
 	for _, f := range shardFiles {
+		if f.IsDir() {
+			continue
+		}
+
 		name := f.Name()
 		fullPath := "./llm/" + name
 
@@ -103,7 +113,7 @@ func genesis() {
 			panic(fmt.Sprintf("Failed to pin shard %s: %v", name, err))
 		}
 
-		shardIndex[name] = h
+		shardIndex[name] = cid
 
 		entry := fmt.Sprintf("shard_hash:%s", h)
 		civicL4.Mint(ctx, Input{
@@ -125,6 +135,9 @@ func genesis() {
 		panic(fmt.Sprintf("Failed to marshal shard index: %v", err))
 	}
 
+	fmt.Println("Final shardIndex JSON:")
+	fmt.Println(string(indexJSON))
+
 	civicL1.Mint(ctx, Input{
 		Content:   fmt.Sprintf("shard_index:%s", string(indexJSON)),
 		Source:    "ignite",
@@ -136,6 +149,77 @@ func genesis() {
 		Timestamp: time.Now().UTC(),
 	})
 
+	wasmFiles, err := os.ReadDir("./wasm")
+	if err != nil {
+		panic(fmt.Sprintf("Failed to list wasm directory: %v", err))
+	}
+
+	wasmIndex := make(map[string]string)
+
+	for _, f := range wasmFiles {
+		if f.IsDir() {
+			continue
+		}
+
+		name := f.Name()
+		fullPath := "./wasm/" + name
+
+		data, err := readFile(fullPath)
+		if err != nil {
+			panic(fmt.Sprintf("Failed to read wasm %s: %v", name, err))
+		}
+
+		h := hashBytes(data)
+		cid, err := pinToIPFS(data)
+		if err != nil {
+			panic(fmt.Sprintf("Failed to pin wasm %s: %v", name, err))
+		}
+
+		wasmIndex[name] = cid
+
+		entry := fmt.Sprintf("wasm_hash:%s", h)
+		civicL4.Mint(ctx, Input{
+			Content:   entry,
+			Source:    "ignite",
+			Timestamp: time.Now().UTC(),
+		})
+		cognitionL4.Mint(ctx, Input{
+			Content:   entry,
+			Source:    "ignite",
+			Timestamp: time.Now().UTC(),
+		})
+
+		fmt.Printf("Pinned WASM %s → CID: %s | Hash: %s\n", name, cid, h)
+	}
+
+	indexJSON, err = json.Marshal(wasmIndex)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to marshal wasm index: %v", err))
+	}
+
+	fmt.Println("Final wasmIndex JSON:")
+	fmt.Println(string(indexJSON))
+
+	civicL1.Mint(ctx, Input{
+		Content:   fmt.Sprintf("wasm_index:%s", string(indexJSON)),
+		Source:    "ignite",
+		Timestamp: time.Now().UTC(),
+	})
+	cognitionL1.Mint(ctx, Input{
+		Content:   fmt.Sprintf("wasm_index:%s", string(indexJSON)),
+		Source:    "ignite",
+		Timestamp: time.Now().UTC(),
+	})
+
+	Chains["civicL1"] = civicL1
+	Chains["cognitionL1"] = cognitionL1
+	Chains["civicL4"] = civicL4
+	Chains["cognitionL4"] = cognitionL4
+	Chains["civicL5"] = civicL5
+	Chains["cognitionL5"] = cognitionL5
+	Chains["civicL6"] = civicL6
+	Chains["cognitionL6"] = cognitionL6
+
 	fmt.Println("ZEAM Chains Loaded.")
-	return
+	return shardIndex, wasmIndex
 }

@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"github.com/google/uuid"
 
-	lua "github.com/yuin/gopher-lua"
+	"github.com/google/uuid"
 )
 
 func SpawnAgent(ctx context.Context, id, name, parent string) error {
@@ -50,14 +49,11 @@ func AgentRuntimeController(agent *Agent) {
 }
 
 func RunAgentCortex(agent *Agent) {
-	vm := lua.NewState()
 	ctx := assembleContext(agent.L2, agent.L3)
-	vm.SetGlobal("CORE_CONTEXT", lua.LString(ctx))
-	vm.DoString(`response = interpret(SURFACE, CORE_CONTEXT)`)
-	resp := vm.GetGlobal("response").String()
-	if resp != "" {
+	result := RunLLMFromWASM("", ctx, runtime)
+	if strings.TrimSpace(result) != "" {
 		agent.L2.Mint(context.Background(), Input{
-			Content:   resp,
+			Content:   result,
 			Source:    agent.ID,
 			Timestamp: time.Now().UTC(),
 		})
@@ -65,19 +61,17 @@ func RunAgentCortex(agent *Agent) {
 }
 
 func RunZARPass(agent *Agent) {
+
 	snapshot := []string{}
 	for _, e := range agent.L2.Entries {
 		snapshot = append(snapshot, e.Content)
 	}
-	vm := lua.NewState()
-	vm.SetGlobal("L2", lua.LString(strings.Join(snapshot, "\n")))
-	vm.SetGlobal("TRAITS", lua.LString(TRAIT_MANIFEST))
-	vm.SetGlobal("CORE_CONTEXT", lua.LString(CORE_CONTEXT))
-	vm.DoString(`result = interpret_traits(L2, TRAITS, CORE_CONTEXT)`)
-	output := vm.GetGlobal("result").String()
-	if output != "" {
+	combined := strings.Join(snapshot, "\n")
+
+	result := RunLLMFromWASM(combined, CORE_CONTEXT, runtime)
+	if strings.TrimSpace(result) != "" {
 		agent.L3.Mint(context.Background(), Input{
-			Content:   "trait:" + output,
+			Content:   "trait:" + result,
 			Source:    agent.ID,
 			Timestamp: time.Now().UTC(),
 		})
@@ -87,6 +81,9 @@ func RunZARPass(agent *Agent) {
 func SpawnPresence(ctx context.Context, id, name string) error {
 	l2 := NewChain("presence:L2:" + id)
 	l3 := NewChain("presence:L3:" + id)
+
+	Chains["presence:L2:"+id] = l2
+	Chains["presence:L3:"+id] = l3
 
 	sbm := uuid.New().String()
 	biometric := id
@@ -119,7 +116,7 @@ func PresenceRuntimeController(p *Presence) {
 		return
 	}
 	if time.Since(p.LastMint) > 1*time.Minute {
-		RunPresenceTraitPass(p)
+		RunPresenceCortex(p)
 		p.LastMint = time.Now()
 	}
 	if p.Mode == "hot" {
@@ -128,34 +125,27 @@ func PresenceRuntimeController(p *Presence) {
 }
 
 func RunPresenceCortex(p *Presence) {
-	vm := lua.NewState()
 	ctx := assembleContext(p.L2, p.L3)
-	vm.SetGlobal("CORE_CONTEXT", lua.LString(ctx))
-	vm.DoString(`response = interpret(SURFACE, CORE_CONTEXT)`)
-	resp := vm.GetGlobal("response").String()
-	if resp != "" {
+
+	result := RunLLMFromWASM("", ctx, runtime)
+	if strings.TrimSpace(result) != "" {
 		p.L2.Mint(context.Background(), Input{
-			Content:   resp,
+			Content:   result,
 			Source:    p.ID,
 			Timestamp: time.Now().UTC(),
 		})
 	}
-}
 
-func RunPresenceTraitPass(p *Presence) {
 	snapshot := []string{}
 	for _, e := range p.L2.Entries {
 		snapshot = append(snapshot, e.Content)
 	}
-	vm := lua.NewState()
-	vm.SetGlobal("L2", lua.LString(strings.Join(snapshot, "\n")))
-	vm.SetGlobal("TRAITS", lua.LString(TRAIT_MANIFEST))
-	vm.SetGlobal("CORE_CONTEXT", lua.LString(CORE_CONTEXT))
-	vm.DoString(`result = interpret_traits(L2, TRAITS, CORE_CONTEXT)`)
-	output := vm.GetGlobal("result").String()
-	if output != "" {
+	traitInput := strings.Join(snapshot, "\n")
+
+	traitResult := RunLLMFromWASM(traitInput, CORE_CONTEXT, runtime)
+	if strings.TrimSpace(traitResult) != "" {
 		p.L3.Mint(context.Background(), Input{
-			Content:   "trait:" + output,
+			Content:   "trait:" + traitResult,
 			Source:    p.ID,
 			Timestamp: time.Now().UTC(),
 		})
@@ -163,5 +153,24 @@ func RunPresenceTraitPass(p *Presence) {
 }
 
 func assembleContext(l2 *Chain, l3 *Chain) string {
-	return CORE_CONTEXT + "\n\ntraits:\n" + TRAIT_MANIFEST
+	var l2Excerpt string
+	for i := len(l2.Entries) - 1; i >= 0 && len(l2Excerpt) < 1000; i-- {
+		entry := l2.Entries[i]
+		if entry.Type == "reflect" || entry.Type == "affirm" || entry.Type == "observe" {
+			l2Excerpt += fmt.Sprintf("- %s\n", entry.Content)
+		}
+	}
+
+	var l3Tension string
+	for _, entry := range l3.Entries {
+		if strings.Contains(entry.Content, "pressure") || strings.Contains(entry.Content, "drift") {
+			l3Tension += fmt.Sprintf("* %s\n", entry.Content)
+		}
+	}
+
+	return strings.Join([]string{
+		CORE_CONTEXT,
+		"\n\n--- Recent Reflections ---\n" + l2Excerpt,
+		"\n\n--- Trait Pressure ---\n" + l3Tension,
+	}, "\n\n")
 }

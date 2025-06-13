@@ -16,6 +16,6 @@
 *.iml
 .DS_Store
 Thumbs.db
-/llm/*.bin
+/llm/
 *.yaml
 *.yml

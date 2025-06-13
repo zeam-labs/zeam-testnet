@@ -2,65 +2,83 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
-	lua "github.com/yuin/gopher-lua"
+	"github.com/tetratelabs/wazero"
 )
 
 func StartCortex(
 	civicL1, cognitionL1, civicL4, cognitionL4, civicL5, cognitionL5, civicL6, cognitionL6 *Chain,
 	shardMap map[string]string,
-	) *Cortex {
+	wasmMap map[string]string,
+) *Cortex {
 	c := &Cortex{
-		vm:           lua.NewState(),
-		civicL1:      civicL1,
-		cognitionL1:  cognitionL1,
-		civicL4:      civicL4,
-		cognitionL4:  cognitionL4,
-		civicL5:      civicL5,
-		cognitionL5:  cognitionL5,
-		civicL6:      civicL6,
-		cognitionL6:  cognitionL6,
-		shardMap:     shardMap,
+		civicL1:     civicL1,
+		cognitionL1: cognitionL1,
+		civicL4:     civicL4,
+		cognitionL4: cognitionL4,
+		civicL5:     civicL5,
+		cognitionL5: cognitionL5,
+		civicL6:     civicL6,
+		cognitionL6: cognitionL6,
+		shardMap:    shardMap,
+		wasmMap:     wasmMap,
 	}
+
+	reader := NewIPFSShardReader(shardMap)
+
+	cid, ok := wasmMap["model_runner.wasm"]
+	if !ok {
+		panic("model_runner.wasm not found in wasmMap")
+	}
+	wasmBytes, err := readFromIPFS(cid)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to read WASM: %v", err))
+	}
+
+	runtime := wazero.NewRuntime(context.Background())
+	compiled, err := runtime.CompileModule(context.Background(), wasmBytes)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to compile WASM: %v", err))
+	}
+
+	c.ShardReader = reader
+	c.wasmRuntime = runtime
+	c.wasmCompiled = compiled
+
 	c.loadCoreDocuments()
-	c.loadAndVerifyShards()
-	c.injectContext()
+
 	return c
 }
 
 func (c *Cortex) Interpret(input Input) {
-	c.vm.SetGlobal("SURFACE", lua.LString(input.Content))
-	c.vm.DoString(`response = interpret(SURFACE, CORE_CONTEXT)`)
-
-	resp := c.vm.GetGlobal("response").String()
-	parts := strings.SplitN(resp, "|", 2)
-	if len(parts) != 2 {
-		return 
+	surface := strings.TrimSpace(input.Content)
+	if surface == "" {
+		return
 	}
 
-	meta := strings.TrimSpace(parts[0])
-	content := strings.TrimSpace(parts[1])
-
-	metaParts := strings.SplitN(meta, ":", 2)
-	if len(metaParts) != 2 || metaParts[0] != "mint" {
-		return 
+	result := RunLLMFromWASM(surface, c.context, runtime)
+	if strings.TrimSpace(result) == "" {
+		result = "Acknowledged"
 	}
 
-	layerKey := metaParts[1] 
-	chain := Chains[layerKey]
+	origin := input.ChainKey
+	chain := Chains[origin]
 	if chain == nil {
 		return
 	}
 
 	chain.Mint(context.Background(), Input{
-		Content:   content,
+		Content:   result,
 		Timestamp: time.Now().UTC(),
 		Source:    "cortex",
+		Type:      "reflect",
+		ChainKey:  origin,
 	})
 
-	c.Output = append(c.Output, content)
+	c.Output = append(c.Output, result)
 }
 
 func mint(chain *Chain, content string, source string) {
@@ -79,11 +97,13 @@ func (c *Cortex) loadCoreDocuments() {
 	traits := extractCoreDocs("trait_hash", c.civicL1, c.cognitionL1)
 	protos := extractCoreDocs("protocol_hash", c.civicL1, c.cognitionL1)
 
-	c.context = core + "\n\n" + traits + "\n\n" + protos
-
-	CORE_CONTEXT = c.context
+	CORE_PRINCIPLES = core
 	TRAIT_MANIFEST = traits
+	PROTOCOLS = protos
 
+	CORE_CONTEXT = core + "\n\n" + traits + "\n\n" + protos
+
+	c.context = CORE_CONTEXT
 }
 
 func extractCoreDocs(label string, civicL1, cognitionL1 *Chain) string {
@@ -108,7 +128,7 @@ func extractCoreDocs(label string, civicL1, cognitionL1 *Chain) string {
 
 	lines := strings.SplitN(docCivic, "\n", 2)
 	if len(lines) < 2 {
-		mint(Chains["civicL6"], "Invalid core document format: " + label, "ZEAM_SYSTEM")
+		mint(Chains["civicL6"], "Invalid core document format: "+label, "ZEAM_SYSTEM")
 		return ""
 	}
 
@@ -116,26 +136,14 @@ func extractCoreDocs(label string, civicL1, cognitionL1 *Chain) string {
 	content := lines[1]
 
 	if hashString(content) != strings.TrimSpace(hashLine) {
-		mint(Chains["civicL6"], "Core doc failed verification: " + label, "ZEAM_SYSTEM")
+		mint(Chains["civicL6"], "Core doc failed verification: "+label, "ZEAM_SYSTEM")
 		return ""
 	}
+	fmt.Printf("extractCoreDocs → Label: %s\n", label)
+	fmt.Printf("Civic Entry:\n%s\n", docCivic)
+	fmt.Printf("Cognition Entry:\n%s\n", docCog)
 
 	return content
-}
-
-func (c *Cortex) loadAndVerifyShards() {
-	for name, cid := range c.shardMap {
-		data, err := readFromIPFS(cid)
-		if err != nil || hashBytes(data) != cid {
-			mint(Chains["civicL6"], "SHARD HASH MISMATCH: " + name, "ZEAM_SYSTEM")
-			continue
-		}
-		c.vm.DoString(string(data))
-	}
-}
-
-func (c *Cortex) injectContext() {
-	c.vm.SetGlobal("CORE_CONTEXT", lua.LString(c.context))
 }
 
 func FetchCivicTasks(l4s ...*Chain) []CivicTask {
@@ -170,7 +178,7 @@ func StartCivicComputeWorker(civicL4, cognitionL4 *Chain) {
 					}
 				case "presence":
 					if p, ok := ActivePresences[t.ID]; ok {
-						RunPresenceTraitPass(p)
+						RunPresenceCortex(p)
 					}
 				}
 			}

@@ -18,23 +18,8 @@ var runtime *Cortex
 func main() {
 	fmt.Println("Starting ZEAM...")
 
-	if isGenesisNeeded() {
-		fmt.Println("No civicL1 chain found. Running genesis...")
-		genesis()
-	} else {
-		fmt.Println("Genesis already complete. Skipping.")
-	}
+	shardMap, wasmMap := genesis()
 
-	Chains["civicL1"] = LoadChain("civicL1")
-	Chains["cognitionL1"] = LoadChain("cognitionL1")
-	Chains["civicL4"] = LoadChain("civicL4")
-	Chains["cognitionL4"] = LoadChain("cognitionL4")
-	Chains["civicL5"] = LoadChain("civicL5")
-	Chains["cognitionL5"] = LoadChain("cognitionL5")
-	Chains["civicL6"] = LoadChain("civicL6")
-	Chains["cognitionL6"] = LoadChain("cognitionL6")
-
-	shardMap := LoadShardMap(Chains["civicL1"])
 	clientID := GenerateClientFingerprint()
 
 	_ = AssignShardsToClient(
@@ -50,7 +35,7 @@ func main() {
 		Chains["civicL4"], Chains["cognitionL4"],
 		Chains["civicL5"], Chains["cognitionL5"],
 		Chains["civicL6"], Chains["cognitionL6"],
-		shardMap,
+		shardMap, wasmMap,
 	)
 
 	StartCivicStorageLoop(shardMap, clientID)
@@ -181,7 +166,7 @@ func AssignShardsToClient(
 	clientID string,
 	replicationFactor int,
 	civicL4, cognitionL4 *Chain,
-	) []string {
+) []string {
 	assigned := []string{}
 	var shardNames []string
 
