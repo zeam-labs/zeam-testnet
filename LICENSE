@@ -1,10 +1,69 @@
-Copyright (c) 2025 ZEAM Labs, LLC  
+ZEAM PROPRIETARY LICENSE
+
+Copyright (c) 2026 ZEAM Foundation, LLC and ZEAM Labs, LLC.
 All Rights Reserved.
 
-This repository and the software it contains (the “Software”) are proprietary to ZEAM Labs, LLC. While the source code is publicly visible, no rights are granted to use, reproduce, modify, distribute, or create derivative works of the Software in any form.
+NOTICE: This software and associated documentation files (the "Software") 
+are proprietary to ZEAM Foundation, LLC and ZEAM Labs, LLC. The Software 
+is protected by copyright laws, patent rights, and international treaties.
 
-The Software is published for transparency and verification purposes only. Use of the Software — including in private, academic, or non-commercial settings — is strictly prohibited without prior written consent from ZEAM Labs, LLC.
+1. NO LICENSE GRANTED
 
-This repository is not open source. Any unauthorized use constitutes a violation of intellectual property law.
+   No license, express or implied, is granted under this notice. The source 
+   code is made available for reference and evaluation purposes only. You may 
+   not use, copy, modify, merge, publish, distribute, sublicense, or sell 
+   copies of the Software without a separate written license agreement.
 
-To request permission or inquire about licensing, contact: info@zeam.foundation
+2. PATENT NOTICE
+
+   The Software implements technology covered by a multi-patent portfolio 
+   held by ZEAM Foundation, LLC. Any use, reproduction, or distribution of 
+   this Software without a valid patent license constitutes patent 
+   infringement and is strictly prohibited.
+
+   Patent applications and issued patents covering this technology are 
+   documented at: https://github.com/zeam-foundation/zeam-ip
+
+3. EVALUATION USE
+
+   You may view and study the source code solely for the purpose of 
+   evaluating the technology for potential licensing. Any other use, 
+   including but not limited to:
+
+   - Running the Software in production environments
+   - Incorporating the Software into other products
+   - Using the Software for commercial purposes
+   - Creating derivative works
+
+   requires a valid commercial license from ZEAM Labs, LLC.
+
+4. LICENSING
+
+   Commercial licenses and enterprise agreements are available from 
+   ZEAM Labs, LLC. For licensing inquiries, contact:
+
+   ZEAM Labs, LLC
+   Email: info@zeamlabs.com
+   Web: https://zeamlabs.com
+
+5. NO WARRANTY
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
+   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL 
+   THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+   DEALINGS IN THE SOFTWARE.
+
+6. ENFORCEMENT
+
+   ZEAM Foundation, LLC and ZEAM Labs, LLC reserve all rights to enforce 
+   their intellectual property rights to the fullest extent of the law, 
+   including seeking injunctive relief and damages for any unauthorized use.
+
+---
+
+For the avoidance of doubt: This is NOT an open source license. This Software 
+is source-available for evaluation purposes only. All rights not expressly 
+granted are reserved.
