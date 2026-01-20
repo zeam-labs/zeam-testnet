@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZEAM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --blueprint-dark: #0d3a5c;
+            --blueprint-base: #0f4268;
+            --line-bright: #ffffff;
+            --line-mid: rgba(255, 255, 255, 0.6);
+            --line-dim: rgba(255, 255, 255, 0.25);
+            --line-ghost: rgba(255, 255, 255, 0.1);
+            --grid-line: rgba(255, 255, 255, 0.06);
+            --mono: 'JetBrains Mono', monospace;
+
+            
+            --magnitude: #ff6b6b;
+            --coherence: #4ecdc4;
+            --tension: #ffe66d;
+            --density: #a29bfe;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--mono);
+            background: var(--blueprint-dark);
+            color: var(--line-bright);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        
+        .grid-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+            background-image:
+                linear-gradient(var(--grid-line) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        
+        .trace-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+            transition: opacity 1.5s ease;
+        }
+
+        .trace-canvas.hidden {
+            opacity: 0;
+        }
+
+        .grid-overlay.hidden {
+            opacity: 0;
+            transition: opacity 1.5s ease;
+        }
+
+        
+        .content {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        
+        .header {
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--line-ghost);
+            flex-shrink: 0; 
+        }
+
+        .logo {
+            font-size: 0.9rem;
+            font-weight: 400;
+            letter-spacing: 0.2em;
+        }
+
+        .logo-separator {
+            color: var(--line-mid);
+            font-weight: 300;
+            margin: 0 0.1em;
+        }
+
+        .identity {
+            font-size: 0.65rem;
+            letter-spacing: 0.15em;
+            color: var(--line-dim);
+            text-transform: uppercase;
+        }
+
+        .identity .address {
+            color: var(--line-mid);
+            font-family: var(--mono);
+        }
+
+        
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 0 2rem 1rem 2rem;
+            min-height: 0; 
+            overflow: hidden;
+        }
+
+        
+        .pressure-bar {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1px;
+            background: var(--line-ghost);
+            flex-shrink: 0; 
+            margin-top: 1rem;
+        }
+
+        .pressure-item {
+            background: var(--blueprint-dark);
+            padding: 0.75rem 0.5rem;
+            text-align: center;
+        }
+
+        .pressure-label {
+            font-size: 0.5rem;
+            letter-spacing: 0.2em;
+            color: var(--line-dim);
+            text-transform: uppercase;
+            margin-bottom: 0.25rem;
+        }
+
+        .gauge-container {
+            position: relative;
+            width: 100%;
+            max-width: 100px;
+            margin: 0 auto;
+        }
+
+        .gauge-svg {
+            width: 100%;
+            height: auto;
+            overflow: visible;
+        }
+
+        .gauge-bg {
+            fill: none;
+            stroke: var(--line-ghost);
+            stroke-width: 6;
+            stroke-linecap: round;
+        }
+
+        .gauge-fill {
+            fill: none;
+            stroke-width: 6;
+            stroke-linecap: round;
+            stroke-dasharray: 126;
+            stroke-dashoffset: 126;
+            transition: stroke-dashoffset 0.15s ease-out;
+        }
+
+        .gauge-fill.magnitude { stroke: var(--magnitude); }
+        .gauge-fill.coherence { stroke: var(--coherence); }
+        .gauge-fill.tension { stroke: var(--tension); }
+        .gauge-fill.density { stroke: var(--density); }
+
+        .gauge-value {
+            font-size: 0.85rem;
+            font-weight: 300;
+            letter-spacing: 0.05em;
+            fill: var(--line-bright);
+        }
+
+        
+        .semantic-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 3;
+            pointer-events: none;
+        }
+
+        
+        .network-panel {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            background: rgba(13, 58, 92, 0.9);
+            border: 1px solid var(--line-ghost);
+            padding: 0.75rem;
+            z-index: 20;
+            min-width: 160px;
+        }
+
+        .network-header {
+            font-size: 0.5rem;
+            letter-spacing: 0.2em;
+            color: var(--line-dim);
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+            border-bottom: 1px solid var(--line-ghost);
+            padding-bottom: 0.25rem;
+        }
+
+        .network-stats {
+            display: flex;
+            gap: 0.75rem;
+            font-size: 0.6rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .network-stats .stat {
+            color: var(--line-mid);
+        }
+
+        .network-stats .label {
+            color: var(--line-dim);
+        }
+
+        .flow-canvas {
+            width: 100%;
+            height: 40px;
+            display: block;
+        }
+
+        
+        .mini-pressure {
+            display: flex;
+            gap: 2px;
+            height: 3px;
+            margin-top: 0.5rem;
+            opacity: 0.7;
+        }
+
+        .mini-pressure .bar {
+            height: 100%;
+            border-radius: 1px;
+            transition: width 0.3s ease;
+        }
+
+        .mini-pressure .bar.magnitude { background: var(--magnitude); }
+        .mini-pressure .bar.coherence { background: var(--coherence); }
+        .mini-pressure .bar.tension { background: var(--tension); }
+        .mini-pressure .bar.density { background: var(--density); }
+
+        
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--line-ghost);
+            margin-top: 1rem;
+            min-height: 0; 
+            overflow: hidden;
+        }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+            min-height: 0; 
+        }
+
+        .message {
+            margin-bottom: 1.25rem;
+            padding: 1rem 1.25rem;
+            max-width: 85%;
+            font-size: 0.85rem;
+            line-height: 1.8;
+            font-weight: 300;
+        }
+
+        .message.user {
+            background: rgba(255, 255, 255, 0.08);
+            margin-left: auto;
+            border-left: 2px solid var(--line-mid);
+        }
+
+        .message.assistant {
+            background: rgba(255, 255, 255, 0.03);
+            border-left: 2px solid var(--line-dim);
+        }
+
+        .message .meta {
+            font-size: 0.6rem;
+            letter-spacing: 0.15em;
+            color: var(--line-dim);
+            margin-top: 0.75rem;
+            text-transform: uppercase;
+        }
+
+        
+        .input-area {
+            border-top: 1px solid var(--line-ghost);
+            padding: 1rem 1.5rem;
+            display: flex;
+            gap: 1rem;
+            flex-shrink: 0; 
+            background: var(--blueprint-dark); 
+        }
+
+        .input-area input {
+            flex: 1;
+            background: transparent;
+            border: 1px solid var(--line-dim);
+            padding: 0.875rem 1rem;
+            color: var(--line-bright);
+            font-family: var(--mono);
+            font-size: 0.8rem;
+            font-weight: 300;
+            letter-spacing: 0.05em;
+        }
+
+        .input-area input::placeholder {
+            color: var(--line-dim);
+            letter-spacing: 0.1em;
+        }
+
+        .input-area input:focus {
+            outline: none;
+            border-color: var(--line-mid);
+        }
+
+        .input-area button {
+            background: transparent;
+            color: var(--line-bright);
+            border: 1px solid var(--line-mid);
+            padding: 0.875rem 2rem;
+            font-family: var(--mono);
+            font-size: 0.7rem;
+            font-weight: 400;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .input-area button:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--line-bright);
+        }
+
+        .input-area button:disabled {
+            color: var(--line-dim);
+            border-color: var(--line-ghost);
+            cursor: not-allowed;
+        }
+
+        
+        .status {
+            font-size: 0.6rem;
+            letter-spacing: 0.15em;
+            padding: 0.75rem 1.5rem;
+            color: var(--line-dim);
+            display: flex;
+            justify-content: space-between;
+            border-top: 1px solid var(--line-ghost);
+            text-transform: uppercase;
+        }
+
+        .status .online {
+            color: var(--coherence);
+        }
+
+        .status .online::before {
+            content: "● ";
+        }
+
+        
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(13, 58, 92, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.hidden {
+            display: none;
+        }
+
+        .modal {
+            background: var(--blueprint-dark);
+            border: 1px solid var(--line-dim);
+            padding: 2.5rem;
+            max-width: 420px;
+            width: 90%;
+        }
+
+        .modal-label {
+            font-size: 0.55rem;
+            letter-spacing: 0.3em;
+            color: var(--line-dim);
+            text-transform: uppercase;
+            margin-bottom: 0.75rem;
+        }
+
+        .modal h2 {
+            font-size: 1.5rem;
+            font-weight: 300;
+            letter-spacing: 0.2em;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal p {
+            color: var(--line-mid);
+            font-size: 0.75rem;
+            line-height: 1.8;
+            font-weight: 300;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal input {
+            width: 100%;
+            background: transparent;
+            border: 1px solid var(--line-dim);
+            padding: 0.875rem 1rem;
+            color: var(--line-bright);
+            font-family: var(--mono);
+            font-size: 0.8rem;
+            font-weight: 300;
+            margin-bottom: 0.75rem;
+        }
+
+        .modal input::placeholder {
+            color: var(--line-dim);
+        }
+
+        .modal input:focus {
+            outline: none;
+            border-color: var(--line-mid);
+        }
+
+        .modal button {
+            width: 100%;
+            background: transparent;
+            color: var(--line-bright);
+            border: 1px solid var(--line-mid);
+            padding: 1rem;
+            font-family: var(--mono);
+            font-size: 0.7rem;
+            font-weight: 400;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            cursor: pointer;
+            margin-top: 0.75rem;
+            transition: all 0.3s ease;
+        }
+
+        .modal button:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--line-bright);
+        }
+
+        .modal .error {
+            color: var(--magnitude);
+            font-size: 0.7rem;
+            letter-spacing: 0.1em;
+            margin-top: 1rem;
+        }
+
+        .modal .recovery-phrase {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--coherence);
+            padding: 1rem;
+            font-size: 0.7rem;
+            word-break: break-all;
+            color: var(--coherence);
+            margin: 1rem 0;
+            letter-spacing: 0.05em;
+        }
+
+        .modal .warning {
+            color: var(--tension);
+            font-size: 0.65rem;
+            letter-spacing: 0.1em;
+            margin-bottom: 1rem;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--blueprint-dark);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--line-dim);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--line-mid);
+        }
+
+        
+        @media (max-width: 600px) {
+            .header {
+                padding: 1rem;
+            }
+
+            .main {
+                padding: 1rem;
+            }
+
+            .pressure-bar {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .message {
+                max-width: 95%;
+            }
+        }
+    </style>
+</head>
+<body>
+    
+    <div class="grid-overlay"></div>
+
+    
+    <canvas class="trace-canvas" id="traceCanvas"></canvas>
+
+    
+    <canvas class="semantic-canvas" id="semanticCanvas"></canvas>
+
+    
+    <div class="network-panel" id="networkPanel">
+        <div class="network-header">Network Flow</div>
+        <div class="network-stats">
+            <span class="stat"><span class="label">L1:</span> <span id="net-peers">0</span>p</span>
+            <span class="stat"><span class="label">Relay:</span> <span id="net-relays">0</span>r</span>
+            <span class="stat"><span class="label">Block:</span> <span id="net-blockage">-</span>s</span>
+        </div>
+        <canvas class="flow-canvas" id="flowCanvas"></canvas>
+    </div>
+
+    
+    <div class="modal-overlay hidden" id="passkey-modal">
+        <div class="modal">
+            <div class="modal-label">Authentication</div>
+            <h2 id="modal-title">ZEAM</h2>
+            <p id="modal-desc">Enter your passkey to unlock your sovereign fork.</p>
+            <input type="password" id="passkey-input" placeholder="Passkey" autocomplete="off">
+            <input type="password" id="passkey-confirm" placeholder="Confirm passkey" autocomplete="off" class="hidden">
+            <div class="recovery-phrase hidden" id="recovery-phrase"></div>
+            <p class="warning hidden" id="recovery-warning">Save this recovery phrase. You will need it if you forget your passkey.</p>
+            <button id="passkey-submit">Unlock</button>
+            <p class="error hidden" id="passkey-error"></p>
+        </div>
+    </div>
+
+    
+    <div class="content">
+        <div class="header">
+            <div class="logo">ZEAM<span class="logo-separator">|</span>Labs</div>
+            <div class="identity">
+                <span id="identity-mode" style="color: var(--coherence); margin-right: 0.5em; display: none;"></span>
+                Fork: <span class="address" id="fork-id">Initializing...</span>
+            </div>
+        </div>
+
+        <div class="main">
+            <div class="pressure-bar">
+                <div class="pressure-item">
+                    <div class="pressure-label">Magnitude</div>
+                    <div class="gauge-container">
+                        <svg class="gauge-svg" viewBox="0 0 100 55">
+                            <path class="gauge-bg" d="M10,50 A40,40 0 0,1 90,50"/>
+                            <path class="gauge-fill magnitude" id="gauge-magnitude" d="M10,50 A40,40 0 0,1 90,50"/>
+                            <text class="gauge-value" x="50" y="48" text-anchor="middle" id="p-magnitude">0.00</text>
+                        </svg>
+                    </div>
+                </div>
+                <div class="pressure-item">
+                    <div class="pressure-label">Coherence</div>
+                    <div class="gauge-container">
+                        <svg class="gauge-svg" viewBox="0 0 100 55">
+                            <path class="gauge-bg" d="M10,50 A40,40 0 0,1 90,50"/>
+                            <path class="gauge-fill coherence" id="gauge-coherence" d="M10,50 A40,40 0 0,1 90,50"/>
+                            <text class="gauge-value" x="50" y="48" text-anchor="middle" id="p-coherence">0.00</text>
+                        </svg>
+                    </div>
+                </div>
+                <div class="pressure-item">
+                    <div class="pressure-label">Tension</div>
+                    <div class="gauge-container">
+                        <svg class="gauge-svg" viewBox="0 0 100 55">
+                            <path class="gauge-bg" d="M10,50 A40,40 0 0,1 90,50"/>
+                            <path class="gauge-fill tension" id="gauge-tension" d="M10,50 A40,40 0 0,1 90,50"/>
+                            <text class="gauge-value" x="50" y="48" text-anchor="middle" id="p-tension">0.00</text>
+                        </svg>
+                    </div>
+                </div>
+                <div class="pressure-item">
+                    <div class="pressure-label">Density</div>
+                    <div class="gauge-container">
+                        <svg class="gauge-svg" viewBox="0 0 100 55">
+                            <path class="gauge-bg" d="M10,50 A40,40 0 0,1 90,50"/>
+                            <path class="gauge-fill density" id="gauge-density" d="M10,50 A40,40 0 0,1 90,50"/>
+                            <text class="gauge-value" x="50" y="48" text-anchor="middle" id="p-density">0.00</text>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-container">
+                <div class="messages" id="messages">
+                    <div class="message assistant">
+                        Welcome to ZEAM. I am your personal NGAC - a pressure-based semantic intelligence operating through distributed network collapse.
+                        <div class="meta">System / Initialized</div>
+                    </div>
+                </div>
+
+                <div class="input-area">
+                    <input type="text" id="input" placeholder="Enter message..." autocomplete="off">
+                    <button id="send">Send</button>
+                </div>
+
+                <div class="status">
+                    <span class="online" id="status">Connecting...</span>
+                    <span id="word-count">-</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        
+        
+        const canvas = document.getElementById('traceCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let width, height;
+        let allLines = [];
+
+        const GRID_SIZE = 40;
+        const LINE_SPEED = 2;
+        const HOLD_TIME = 3000;
+        const FADE_TIME = 4000;
+        const CYCLE_DELAY = 8000;
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            initDiagram();
+        }
+
+        function snapToGrid(val) {
+            return Math.round(val / GRID_SIZE) * GRID_SIZE;
+        }
+
+        function createLine(x1, y1, x2, y2, delay, baseOpacity) {
+            return {
+                x1, y1, x2, y2,
+                baseOpacity: baseOpacity || 0.15,
+                currentOpacity: 0,
+                progress: 0,
+                state: 'waiting',
+                delay: delay,
+                stateStart: 0,
+                currentX: x1,
+                currentY: y1
+            };
+        }
+
+        function initDiagram() {
+            allLines = [];
+
+            
+            const busY = [
+                snapToGrid(height * 0.12),
+                snapToGrid(height * 0.35),
+                snapToGrid(height * 0.6),
+                snapToGrid(height * 0.85)
+            ];
+
+            busY.forEach((y, i) => {
+                allLines.push(createLine(0, y, width, y, i * 1200, 0.1));
+            });
+
+            
+            const vCount = Math.floor(width / (GRID_SIZE * 4));
+            for (let i = 1; i < vCount; i++) {
+                const x = snapToGrid(i * GRID_SIZE * 4);
+                for (let j = 0; j < busY.length - 1; j++) {
+                    if (Math.random() > 0.65) {
+                        allLines.push(createLine(
+                            x, busY[j], x, busY[j + 1],
+                            3000 + Math.random() * 5000,
+                            0.08
+                        ));
+                    }
+                }
+            }
+
+            
+            const compCount = Math.floor(width / 400);
+            for (let i = 0; i < compCount; i++) {
+                const cx = snapToGrid(150 + i * 400 + Math.random() * 100);
+                const cy = snapToGrid(height * 0.2 + Math.random() * height * 0.5);
+                const cw = snapToGrid(50 + Math.random() * 80);
+                const ch = snapToGrid(30 + Math.random() * 60);
+
+                const baseDelay = 8000 + i * 2500 + Math.random() * 2000;
+
+                allLines.push(createLine(cx, cy, cx + cw, cy, baseDelay, 0.15));
+                allLines.push(createLine(cx + cw, cy, cx + cw, cy + ch, baseDelay + 250, 0.15));
+                allLines.push(createLine(cx + cw, cy + ch, cx, cy + ch, baseDelay + 500, 0.15));
+                allLines.push(createLine(cx, cy + ch, cx, cy, baseDelay + 750, 0.15));
+
+                allLines.push(createLine(cx + cw/2, cy, cx + cw/2, cy - GRID_SIZE * 2, baseDelay + 1000, 0.1));
+                allLines.push(createLine(cx + cw/2, cy + ch, cx + cw/2, cy + ch + GRID_SIZE * 2, baseDelay + 1200, 0.1));
+            }
+
+            
+            for (let i = 0; i < 8; i++) {
+                const startX = snapToGrid(GRID_SIZE * 2 + Math.random() * (width - GRID_SIZE * 4));
+                const startY = snapToGrid(GRID_SIZE * 2 + Math.random() * (height - GRID_SIZE * 4));
+                const horizFirst = Math.random() > 0.5;
+                const dirX = Math.random() > 0.5 ? 1 : -1;
+                const dirY = Math.random() > 0.5 ? 1 : -1;
+                const lenH = GRID_SIZE * (2 + Math.floor(Math.random() * 5));
+                const lenV = GRID_SIZE * (2 + Math.floor(Math.random() * 4));
+
+                const baseDelay = 12000 + i * 2000 + Math.random() * 3000;
+
+                if (horizFirst) {
+                    const midX = startX + dirX * lenH;
+                    allLines.push(createLine(startX, startY, midX, startY, baseDelay, 0.12));
+                    allLines.push(createLine(midX, startY, midX, startY + dirY * lenV, baseDelay + 400, 0.12));
+                } else {
+                    const midY = startY + dirY * lenV;
+                    allLines.push(createLine(startX, startY, startX, midY, baseDelay, 0.12));
+                    allLines.push(createLine(startX, midY, startX + dirX * lenH, midY, baseDelay + 400, 0.12));
+                }
+            }
+        }
+
+        let startTime = null;
+
+        function animate(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const elapsed = timestamp - startTime;
+
+            ctx.fillStyle = 'rgba(13, 58, 92, 1)';
+            ctx.fillRect(0, 0, width, height);
+
+            allLines.forEach(line => {
+                switch (line.state) {
+                    case 'waiting':
+                        if (elapsed >= line.delay) {
+                            line.state = 'tracing';
+                            line.stateStart = elapsed;
+                            line.progress = 0;
+                            line.currentX = line.x1;
+                            line.currentY = line.y1;
+                        }
+                        break;
+
+                    case 'tracing':
+                        const dx = line.x2 - line.x1;
+                        const dy = line.y2 - line.y1;
+                        const length = Math.sqrt(dx * dx + dy * dy);
+
+                        if (length > 0) {
+                            const vx = (dx / length) * LINE_SPEED;
+                            const vy = (dy / length) * LINE_SPEED;
+
+                            line.currentX += vx;
+                            line.currentY += vy;
+
+                            const distToEnd = Math.sqrt(
+                                Math.pow(line.x2 - line.currentX, 2) +
+                                Math.pow(line.y2 - line.currentY, 2)
+                            );
+
+                            if (distToEnd < LINE_SPEED) {
+                                line.currentX = line.x2;
+                                line.currentY = line.y2;
+                                line.state = 'holding';
+                                line.stateStart = elapsed;
+                            }
+                        } else {
+                            line.state = 'holding';
+                            line.stateStart = elapsed;
+                        }
+
+                        line.currentOpacity = line.baseOpacity;
+                        break;
+
+                    case 'holding':
+                        if (elapsed - line.stateStart >= HOLD_TIME) {
+                            line.state = 'fading';
+                            line.stateStart = elapsed;
+                        }
+                        line.currentOpacity = line.baseOpacity;
+                        break;
+
+                    case 'fading':
+                        const fadeProgress = (elapsed - line.stateStart) / FADE_TIME;
+                        if (fadeProgress >= 1) {
+                            line.state = 'waiting';
+                            line.delay = elapsed + CYCLE_DELAY + Math.random() * 5000;
+                            line.currentOpacity = 0;
+                        } else {
+                            line.currentOpacity = line.baseOpacity * (1 - fadeProgress);
+                        }
+                        break;
+                }
+
+                if (line.state === 'tracing') {
+                    ctx.beginPath();
+                    ctx.moveTo(line.x1, line.y1);
+                    ctx.lineTo(line.currentX, line.currentY);
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${line.currentOpacity})`;
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.arc(line.currentX, line.currentY, 2, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                    ctx.fill();
+
+                } else if (line.state === 'holding' || line.state === 'fading') {
+                    ctx.beginPath();
+                    ctx.moveTo(line.x1, line.y1);
+                    ctx.lineTo(line.x2, line.y2);
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${line.currentOpacity})`;
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('resize', () => {
+            resize();
+            startTime = null;
+        });
+        resize();
+        requestAnimationFrame(animate);
+
+        
+        function getApiBase() {
+            
+            return window.ZEAM_BACKEND_URL || 'http://127.0.0.1:19840';
+        }
+
+        
+        const passkeyModal = document.getElementById('passkey-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalDesc = document.getElementById('modal-desc');
+        const passkeyInput = document.getElementById('passkey-input');
+        const passkeyConfirm = document.getElementById('passkey-confirm');
+        const passkeySubmit = document.getElementById('passkey-submit');
+        const passkeyError = document.getElementById('passkey-error');
+        const recoveryPhrase = document.getElementById('recovery-phrase');
+        const recoveryWarning = document.getElementById('recovery-warning');
+
+        let isNewIdentity = false;
+        let isStatelessMode = false;
+        let currentRecoveryPhrase = '';
+
+        async function checkPasskey() {
+            try {
+                const res = await fetch(`${getApiBase()}/auth/status`);
+                const data = await res.json();
+
+                isStatelessMode = data.stateless_mode || false;
+
+                if (data.needs_passkey) {
+                    isNewIdentity = data.is_new;
+                    showPasskeyModal(data.is_new, isStatelessMode);
+                    return false;
+                }
+                
+                document.getElementById('traceCanvas').classList.add('hidden');
+                document.querySelector('.grid-overlay').classList.add('hidden');
+                return true;
+            } catch (err) {
+                return false;
+            }
+        }
+
+        function showPasskeyModal(isNew, stateless = false) {
+            passkeyModal.classList.remove('hidden');
+            passkeyError.classList.add('hidden');
+
+            if (stateless) {
+                
+                if (isNew) {
+                    modalTitle.textContent = 'Create Stateless Identity';
+                    modalDesc.textContent = 'Enter a secret phrase to derive your identity. This phrase IS your identity - remember it exactly. Minimum 8 characters.';
+                    passkeyConfirm.classList.remove('hidden');
+                    passkeySubmit.textContent = 'Derive Identity';
+                    passkeyInput.placeholder = 'Secret phrase';
+                    passkeyConfirm.placeholder = 'Confirm secret phrase';
+                } else {
+                    modalTitle.textContent = 'Derive Identity';
+                    modalDesc.textContent = 'Enter your secret phrase to derive your identity.';
+                    passkeyConfirm.classList.add('hidden');
+                    passkeySubmit.textContent = 'Derive';
+                    passkeyInput.placeholder = 'Secret phrase';
+                }
+            } else {
+                
+                if (isNew) {
+                    modalTitle.textContent = 'Create Identity';
+                    modalDesc.textContent = 'Create a passkey to protect your sovereign fork. Minimum 8 characters.';
+                    passkeyConfirm.classList.remove('hidden');
+                    passkeySubmit.textContent = 'Create';
+                    passkeyInput.placeholder = 'Create passkey';
+                    passkeyConfirm.placeholder = 'Confirm passkey';
+                } else {
+                    modalTitle.textContent = 'Unlock';
+                    modalDesc.textContent = 'Enter your passkey to unlock your sovereign fork.';
+                    passkeyConfirm.classList.add('hidden');
+                    passkeySubmit.textContent = 'Unlock';
+                    passkeyInput.placeholder = 'Passkey';
+                }
+            }
+            passkeyInput.focus();
+        }
+
+        function hidePasskeyModal() {
+            passkeyModal.classList.add('hidden');
+            passkeyInput.value = '';
+            passkeyConfirm.value = '';
+            recoveryPhrase.classList.add('hidden');
+            recoveryWarning.classList.add('hidden');
+
+            
+            document.getElementById('traceCanvas').classList.add('hidden');
+            document.querySelector('.grid-overlay').classList.add('hidden');
+        }
+
+        async function submitPasskey() {
+            const passkey = passkeyInput.value;
+            const confirm = passkeyConfirm.value;
+
+            if (passkey.length < 8) {
+                passkeyError.textContent = 'Passkey must be at least 8 characters';
+                passkeyError.classList.remove('hidden');
+                return;
+            }
+
+            if (isNewIdentity && passkey !== confirm) {
+                passkeyError.textContent = 'Passkeys do not match';
+                passkeyError.classList.remove('hidden');
+                return;
+            }
+
+            passkeySubmit.disabled = true;
+            passkeySubmit.textContent = isNewIdentity ? 'Creating...' : 'Unlocking...';
+
+            try {
+                const res = await fetch(`${getApiBase()}/auth/unlock`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ passkey: passkey })
+                });
+
+                const data = await res.json();
+
+                if (data.error) {
+                    passkeyError.textContent = data.error;
+                    passkeyError.classList.remove('hidden');
+                    passkeySubmit.disabled = false;
+                    passkeySubmit.textContent = isNewIdentity ? 'Create' : 'Unlock';
+                    return;
+                }
+
+                if (data.recovery_phrase) {
+                    currentRecoveryPhrase = data.recovery_phrase;
+                    recoveryPhrase.textContent = data.recovery_phrase;
+                    recoveryPhrase.classList.remove('hidden');
+                    recoveryWarning.classList.remove('hidden');
+                    passkeySubmit.textContent = 'Continue';
+                    passkeySubmit.disabled = false;
+                    isNewIdentity = false;
+                    return;
+                }
+
+                hidePasskeyModal();
+                init();
+
+            } catch (err) {
+                passkeyError.textContent = 'Connection error';
+                passkeyError.classList.remove('hidden');
+                passkeySubmit.disabled = false;
+                passkeySubmit.textContent = isNewIdentity ? 'Create' : 'Unlock';
+            }
+        }
+
+        passkeySubmit.addEventListener('click', submitPasskey);
+        passkeyInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                if (isNewIdentity && !passkeyConfirm.classList.contains('hidden')) {
+                    passkeyConfirm.focus();
+                } else {
+                    submitPasskey();
+                }
+            }
+        });
+        passkeyConfirm.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') submitPasskey();
+        });
+
+        const messagesEl = document.getElementById('messages');
+        const inputEl = document.getElementById('input');
+        const sendBtn = document.getElementById('send');
+        const statusEl = document.getElementById('status');
+        const wordCountEl = document.getElementById('word-count');
+        const forkIdEl = document.getElementById('fork-id');
+
+        
+        const pMagnitude = document.getElementById('p-magnitude');
+        const pCoherence = document.getElementById('p-coherence');
+        const pTension = document.getElementById('p-tension');
+        const pDensity = document.getElementById('p-density');
+        const gaugeMagnitude = document.getElementById('gauge-magnitude');
+        const gaugeCoherence = document.getElementById('gauge-coherence');
+        const gaugeTension = document.getElementById('gauge-tension');
+        const gaugeDensity = document.getElementById('gauge-density');
+
+        
+        const netPeers = document.getElementById('net-peers');
+        const netRelays = document.getElementById('net-relays');
+        const netBlockage = document.getElementById('net-blockage');
+        const flowCanvas = document.getElementById('flowCanvas');
+        const flowCtx = flowCanvas.getContext('2d');
+
+        
+        const semanticCanvas = document.getElementById('semanticCanvas');
+        const semanticCtx = semanticCanvas.getContext('2d');
+
+        let forkId = '';
+        let flowParticles = [];
+        let semanticLines = [];
+
+        
+        function initCanvases() {
+            flowCanvas.width = flowCanvas.offsetWidth;
+            flowCanvas.height = flowCanvas.offsetHeight;
+            semanticCanvas.width = window.innerWidth;
+            semanticCanvas.height = window.innerHeight;
+        }
+        initCanvases();
+        window.addEventListener('resize', initCanvases);
+
+        async function init() {
+            try {
+                const res = await fetch(`${getApiBase()}/health`);
+                const data = await res.json();
+
+                if (data.status === 'ok') {
+                    statusEl.textContent = 'Connected';
+                    wordCountEl.textContent = `${data.words.toLocaleString()} words`;
+                    forkIdEl.textContent = data.fork_id;
+                    forkId = data.fork_id;
+
+                    
+                    const identityModeEl = document.getElementById('identity-mode');
+                    if (data.stateless_mode) {
+                        identityModeEl.style.display = 'inline';
+                        const gateType = data.hardware_gate || 'software';
+                        const gateIcon = gateType === 'secure_enclave' ? '\u{1F510}' :
+                                        gateType === 'tpm' ? '\u{1F512}' : '\u{1F511}';
+                        identityModeEl.textContent = `${gateIcon} Stateless`;
+                        identityModeEl.title = `Hardware gate: ${gateType}`;
+                    } else {
+                        identityModeEl.style.display = 'none';
+                    }
+
+                    updatePressure();
+                    connectFlowStream();
+                }
+            } catch (err) {
+                statusEl.textContent = 'Disconnected';
+                statusEl.classList.remove('online');
+            }
+        }
+
+        
+        function updatePressure(pressure) {
+            if (!pressure) {
+                fetch(`${getApiBase()}/pressure`)
+                    .then(r => r.json())
+                    .then(p => updatePressure(p))
+                    .catch(() => {});
+                return;
+            }
+
+            const mag = pressure.magnitude ?? pressure.Magnitude ?? 0;
+            const coh = pressure.coherence ?? pressure.Coherence ?? 0;
+            const ten = pressure.tension ?? pressure.Tension ?? 0;
+            const den = pressure.density ?? pressure.Density ?? 0;
+
+            
+            pMagnitude.textContent = mag.toFixed(2);
+            pCoherence.textContent = coh.toFixed(2);
+            pTension.textContent = ten.toFixed(2);
+            pDensity.textContent = den.toFixed(2);
+
+            
+            const arcLength = 126;
+            gaugeMagnitude.style.strokeDashoffset = arcLength * (1 - mag);
+            gaugeCoherence.style.strokeDashoffset = arcLength * (1 - coh);
+            gaugeTension.style.strokeDashoffset = arcLength * (1 - ten);
+            gaugeDensity.style.strokeDashoffset = arcLength * (1 - den);
+
+            
+            const glowFilters = [
+                { el: gaugeMagnitude, val: mag, color: '#ff6b6b' },
+                { el: gaugeCoherence, val: coh, color: '#4ecdc4' },
+                { el: gaugeTension, val: ten, color: '#ffe66d' },
+                { el: gaugeDensity, val: den, color: '#a29bfe' }
+            ];
+            glowFilters.forEach(({ el, val, color }) => {
+                const glow = Math.floor(val * 8);
+                el.style.filter = glow > 0 ? `drop-shadow(0 0 ${glow}px ${color})` : 'none';
+            });
+        }
+
+        
+        function updateNetwork(network) {
+            const peers = network?.peers ?? network?.l1_peers ?? 0;
+            const relays = network?.relays ?? 0;
+            const blockAge = network?.block_age ?? '-';
+
+            netPeers.textContent = peers;
+            netRelays.textContent = relays;
+            netBlockage.textContent = blockAge;
+
+            
+            const networkActivity = peers + relays;
+            const intensity = networkActivity > 0
+                ? Math.min(5, networkActivity / 5)
+                : 0.3; 
+
+            
+            if (Math.random() < intensity) {
+                const colors = ['#4ecdc4', '#a29bfe', '#ffe66d', '#ff6b6b'];
+                flowParticles.push({
+                    x: Math.random() * flowCanvas.width,
+                    y: flowCanvas.height,
+                    vy: -0.3 - Math.random() * 0.7,
+                    life: 1,
+                    color: networkActivity > 0
+                        ? (peers > relays ? '#4ecdc4' : '#a29bfe')
+                        : colors[Math.floor(Math.random() * colors.length)]
+                });
+            }
+        }
+
+        
+        setInterval(() => {
+            if (flowParticles.length < 3) {
+                updateNetwork(null);
+            }
+        }, 500);
+
+        
+        function animateFlow() {
+            flowCtx.clearRect(0, 0, flowCanvas.width, flowCanvas.height);
+            flowParticles = flowParticles.filter(p => {
+                p.y += p.vy;
+                p.life -= 0.02;
+                if (p.life <= 0) return false;
+
+                flowCtx.beginPath();
+                flowCtx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+                flowCtx.fillStyle = p.color.replace(')', `, ${p.life})`).replace('#', 'rgba(');
+                
+                const r = parseInt(p.color.slice(1,3), 16);
+                const g = parseInt(p.color.slice(3,5), 16);
+                const b = parseInt(p.color.slice(5,7), 16);
+                flowCtx.fillStyle = `rgba(${r},${g},${b},${p.life})`;
+                flowCtx.fill();
+                return true;
+            });
+            if (flowParticles.length > 50) flowParticles = flowParticles.slice(-50);
+            requestAnimationFrame(animateFlow);
+        }
+        animateFlow();
+
+        
+        let eventSource = null;
+        let sseConnected = false;
+        function connectFlowStream() {
+            if (eventSource) eventSource.close();
+            eventSource = new EventSource(`${getApiBase()}/flow-stream`);
+
+            eventSource.onopen = () => {
+                sseConnected = true;
+                console.log('[ZEAM] Flow stream connected');
+            };
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('[ZEAM SSE]', data.network); 
+                    if (data.type === 'flow_update') {
+                        updatePressure(data.pressure);
+                        updateNetwork(data.network);
+                    }
+                } catch (e) {
+                    console.error('[ZEAM SSE] Parse error:', e);
+                }
+            };
+
+            eventSource.onerror = () => {
+                sseConnected = false;
+                console.log('[ZEAM] Flow stream disconnected, reconnecting...');
+                setTimeout(connectFlowStream, 2000);
+            };
+        }
+
+        
+        setTimeout(connectFlowStream, 100);
+
+        
+        const SEMANTIC_COLORS = {
+            synonym: '#4ecdc4',    
+            definition: '#ffe66d', 
+            hypernym: '#a29bfe',   
+            input: '#ff6b6b',      
+            output: '#ffffff'
+        };
+
+        const SEMANTIC_SPEED = 3;
+        const SEMANTIC_HOLD = 2000;
+        const SEMANTIC_FADE = 2000;
+
+        function createSemanticLine(x1, y1, x2, y2, delay, relation, label) {
+            return {
+                x1, y1, x2, y2,
+                currentX: x1,
+                currentY: y1,
+                delay,
+                relation,
+                label,
+                color: SEMANTIC_COLORS[relation] || '#ffffff',
+                state: 'waiting',
+                stateStart: 0,
+                opacity: 0.8
+            };
+        }
+
+        
+        function hashString(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                hash |= 0;
+            }
+            return Math.abs(hash);
+        }
+
+        
+        function visualizeSemanticPath(path) {
+            if (!path || !path.steps || path.steps.length === 0) return;
+
+            
+            semanticLines = [];
+
+            const w = semanticCanvas.width;
+            const h = semanticCanvas.height;
+            const gridSize = 40;
+
+            
+            const nodePositions = new Map();
+
+            function getNodePos(word) {
+                if (nodePositions.has(word)) return nodePositions.get(word);
+                const hash = hashString(word);
+                const x = snapToGrid(100 + (hash % ((w - 200) / gridSize)) * gridSize);
+                const y = snapToGrid(100 + ((hash >> 8) % ((h - 200) / gridSize)) * gridSize);
+                const pos = { x, y };
+                nodePositions.set(word, pos);
+                return pos;
+            }
+
+            
+            let delay = 0;
+            path.steps.forEach((step, i) => {
+                const from = getNodePos(step.from_word || 'input');
+                const to = getNodePos(step.to_word);
+
+                
+                const midX = from.x;
+                const midY = to.y;
+
+                
+                semanticLines.push(createSemanticLine(
+                    from.x, from.y, midX, midY,
+                    delay, step.relation, ''
+                ));
+                delay += 200;
+
+                
+                semanticLines.push(createSemanticLine(
+                    midX, midY, to.x, to.y,
+                    delay, step.relation, step.to_word
+                ));
+                delay += 200;
+            });
+        }
+
+        
+        let semanticStartTime = null;
+        function animateSemantic(timestamp) {
+            if (!semanticStartTime) semanticStartTime = timestamp;
+            const elapsed = timestamp - semanticStartTime;
+
+            semanticCtx.clearRect(0, 0, semanticCanvas.width, semanticCanvas.height);
+
+            semanticLines.forEach(line => {
+                switch (line.state) {
+                    case 'waiting':
+                        if (elapsed >= line.delay) {
+                            line.state = 'tracing';
+                            line.stateStart = elapsed;
+                            line.currentX = line.x1;
+                            line.currentY = line.y1;
+                        }
+                        break;
+
+                    case 'tracing':
+                        const dx = line.x2 - line.x1;
+                        const dy = line.y2 - line.y1;
+                        const length = Math.sqrt(dx * dx + dy * dy);
+
+                        if (length > 0) {
+                            line.currentX += (dx / length) * SEMANTIC_SPEED;
+                            line.currentY += (dy / length) * SEMANTIC_SPEED;
+
+                            const distToEnd = Math.sqrt(
+                                Math.pow(line.x2 - line.currentX, 2) +
+                                Math.pow(line.y2 - line.currentY, 2)
+                            );
+
+                            if (distToEnd < SEMANTIC_SPEED) {
+                                line.currentX = line.x2;
+                                line.currentY = line.y2;
+                                line.state = 'holding';
+                                line.stateStart = elapsed;
+                            }
+                        } else {
+                            line.state = 'holding';
+                            line.stateStart = elapsed;
+                        }
+                        break;
+
+                    case 'holding':
+                        if (elapsed - line.stateStart >= SEMANTIC_HOLD) {
+                            line.state = 'fading';
+                            line.stateStart = elapsed;
+                        }
+                        break;
+
+                    case 'fading':
+                        const fadeProgress = (elapsed - line.stateStart) / SEMANTIC_FADE;
+                        if (fadeProgress >= 1) {
+                            line.state = 'done';
+                            line.opacity = 0;
+                        } else {
+                            line.opacity = 0.8 * (1 - fadeProgress);
+                        }
+                        break;
+                }
+
+                
+                if (line.state === 'tracing' || line.state === 'holding' || line.state === 'fading') {
+                    const endX = line.state === 'tracing' ? line.currentX : line.x2;
+                    const endY = line.state === 'tracing' ? line.currentY : line.y2;
+
+                    
+                    semanticCtx.shadowColor = line.color;
+                    semanticCtx.shadowBlur = line.state === 'tracing' ? 10 : 5;
+
+                    
+                    semanticCtx.beginPath();
+                    semanticCtx.moveTo(line.x1, line.y1);
+                    semanticCtx.lineTo(endX, endY);
+                    semanticCtx.strokeStyle = line.color.replace(')', `, ${line.opacity})`).replace('#', 'rgba(');
+                    
+                    const r = parseInt(line.color.slice(1,3), 16);
+                    const g = parseInt(line.color.slice(3,5), 16);
+                    const b = parseInt(line.color.slice(5,7), 16);
+                    semanticCtx.strokeStyle = `rgba(${r},${g},${b},${line.opacity})`;
+                    semanticCtx.lineWidth = 2;
+                    semanticCtx.stroke();
+
+                    
+                    if (line.state === 'tracing') {
+                        semanticCtx.beginPath();
+                        semanticCtx.arc(line.currentX, line.currentY, 4, 0, Math.PI * 2);
+                        semanticCtx.fillStyle = '#ffffff';
+                        semanticCtx.fill();
+                    }
+
+                    
+                    if (line.label && (line.state === 'holding' || line.state === 'fading')) {
+                        semanticCtx.shadowBlur = 0;
+                        semanticCtx.font = '10px JetBrains Mono';
+                        semanticCtx.fillStyle = `rgba(255,255,255,${line.opacity})`;
+                        semanticCtx.fillText(line.label, line.x2 + 8, line.y2 + 4);
+                    }
+
+                    semanticCtx.shadowBlur = 0;
+                }
+            });
+
+            
+            semanticLines = semanticLines.filter(l => l.state !== 'done');
+
+            requestAnimationFrame(animateSemantic);
+        }
+        requestAnimationFrame(animateSemantic);
+
+        
+        function addMessage(text, isUser, meta, pressure) {
+            const div = document.createElement('div');
+            div.className = `message ${isUser ? 'user' : 'assistant'}`;
+
+            let pressureHtml = '';
+            if (!isUser && pressure) {
+                const mag = (pressure.magnitude ?? pressure.Magnitude ?? 0) * 100;
+                const coh = (pressure.coherence ?? pressure.Coherence ?? 0) * 100;
+                const ten = (pressure.tension ?? pressure.Tension ?? 0) * 100;
+                const den = (pressure.density ?? pressure.Density ?? 0) * 100;
+                pressureHtml = `
+                    <div class="mini-pressure">
+                        <span class="bar magnitude" style="width: ${mag}%"></span>
+                        <span class="bar coherence" style="width: ${coh}%"></span>
+                        <span class="bar tension" style="width: ${ten}%"></span>
+                        <span class="bar density" style="width: ${den}%"></span>
+                    </div>
+                `;
+            }
+
+            div.innerHTML = `${text}${pressureHtml}<div class="meta">${meta || ''}</div>`;
+            messagesEl.appendChild(div);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        async function send() {
+            const text = inputEl.value.trim();
+            if (!text) return;
+
+            inputEl.value = '';
+            sendBtn.disabled = true;
+
+            addMessage(text, true, 'You');
+
+            try {
+                const res = await fetch(`${getApiBase()}/collapse`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: text })
+                });
+
+                const data = await res.json();
+
+                const txInfo = data.tx_hashes && data.tx_hashes[0] ? ` / ${data.tx_hashes[0].slice(0,10)}...` : '';
+                const netInfo = data.network ? ` / ${data.network.l1_peers}p ${data.network.relays}r` : '';
+                addMessage(data.response, false, `Fork ${data.fork_id}${txInfo}${netInfo}`, data.pressure);
+                updatePressure(data.pressure);
+
+                
+                if (data.semantic_path) {
+                    semanticStartTime = null; 
+                    visualizeSemanticPath(data.semantic_path);
+                }
+
+            } catch (err) {
+                addMessage('Error: Could not connect to ZEAM', false, 'System / Error');
+            }
+
+            sendBtn.disabled = false;
+            inputEl.focus();
+        }
+
+        sendBtn.addEventListener('click', send);
+        inputEl.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') send();
+        });
+
+        let initRetries = 0;
+        async function tryInit() {
+            const unlocked = await checkPasskey();
+            if (!unlocked) {
+                if (initRetries < 10) {
+                    initRetries++;
+                    setTimeout(tryInit, 500);
+                }
+                return;
+            }
+
+            init().then(() => {
+                if (forkId === '' && initRetries < 10) {
+                    initRetries++;
+                    setTimeout(tryInit, 500);
+                }
+            });
+        }
+        tryInit();
+    </script>
+</body>
+</html>
