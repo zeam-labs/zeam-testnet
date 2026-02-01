@@ -1,5 +1,3 @@
-
-
 package memory
 
 import (
@@ -13,43 +11,35 @@ import (
 	"time"
 )
 
-
 type Pathway struct {
-	FromHash   string    `json:"from_hash"`   
-	ToHash     string    `json:"to_hash"`     
-	FromWord   string    `json:"from_word"`   
-	ToWord     string    `json:"to_word"`     
-	Strength   float64   `json:"strength"`    
-	Activations int      `json:"activations"` 
-	LastUsed   time.Time `json:"last_used"`   
-	Created    time.Time `json:"created"`     
+	FromHash   string    `json:"from_hash"`
+	ToHash     string    `json:"to_hash"`
+	FromWord   string    `json:"from_word"`
+	ToWord     string    `json:"to_word"`
+	Strength   float64   `json:"strength"`
+	Activations int      `json:"activations"`
+	LastUsed   time.Time `json:"last_used"`
+	Created    time.Time `json:"created"`
 }
-
 
 type PathwayMemory struct {
 	mu sync.RWMutex
 
-	
 	Pathways map[string]*Pathway `json:"pathways"`
 
-	
-	BySource map[string][]string `json:"by_source"` 
+	BySource map[string][]string `json:"by_source"`
 
-	
 	TotalActivations int64     `json:"total_activations"`
 	CreatedAt        time.Time `json:"created_at"`
 	LastModified     time.Time `json:"last_modified"`
 
-	
-	DecayRate      float64 `json:"decay_rate"`       
-	ReinforceDelta float64 `json:"reinforce_delta"`  
-	MaxStrength    float64 `json:"max_strength"`     
-	MinStrength    float64 `json:"min_strength"`     
+	DecayRate      float64 `json:"decay_rate"`
+	ReinforceDelta float64 `json:"reinforce_delta"`
+	MaxStrength    float64 `json:"max_strength"`
+	MinStrength    float64 `json:"min_strength"`
 
-	
 	storagePath string
 }
-
 
 func NewPathwayMemory(storagePath string) *PathwayMemory {
 	pm := &PathwayMemory{
@@ -57,15 +47,14 @@ func NewPathwayMemory(storagePath string) *PathwayMemory {
 		BySource:       make(map[string][]string),
 		CreatedAt:      time.Now(),
 		LastModified:   time.Now(),
-		DecayRate:      0.01,  
-		ReinforceDelta: 0.05,  
+		DecayRate:      0.01,
+		ReinforceDelta: 0.05,
 		MaxStrength:    1.0,
-		MinStrength:    0.001, 
+		MinStrength:    0.001,
 		storagePath:    storagePath,
 	}
 	return pm
 }
-
 
 func LoadPathwayMemory(storagePath string) (*PathwayMemory, error) {
 	pm := NewPathwayMemory(storagePath)
@@ -74,7 +63,7 @@ func LoadPathwayMemory(storagePath string) (*PathwayMemory, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return pm, nil 
+			return pm, nil
 		}
 		return nil, err
 	}
@@ -86,7 +75,6 @@ func LoadPathwayMemory(storagePath string) (*PathwayMemory, error) {
 	pm.storagePath = storagePath
 	return pm, nil
 }
-
 
 func (pm *PathwayMemory) Save() error {
 	pm.mu.RLock()
@@ -107,17 +95,14 @@ func (pm *PathwayMemory) Save() error {
 	return os.WriteFile(filePath, data, 0600)
 }
 
-
 func pathwayKey(fromHash, toHash string) string {
 	return fromHash + ":" + toHash
 }
 
-
 func ConceptHash(word string) string {
 	h := sha256.Sum256([]byte(word))
-	return hex.EncodeToString(h[:8]) 
+	return hex.EncodeToString(h[:8])
 }
-
 
 func (pm *PathwayMemory) Strengthen(fromWord, toWord string) {
 	pm.mu.Lock()
@@ -139,10 +124,9 @@ func (pm *PathwayMemory) Strengthen(fromWord, toWord string) {
 		}
 		pm.Pathways[key] = pathway
 
-		
 		pm.BySource[fromHash] = append(pm.BySource[fromHash], key)
 	} else {
-		
+
 		pathway.Strength += pm.ReinforceDelta
 		if pathway.Strength > pm.MaxStrength {
 			pathway.Strength = pm.MaxStrength
@@ -154,13 +138,11 @@ func (pm *PathwayMemory) Strengthen(fromWord, toWord string) {
 	pm.TotalActivations++
 }
 
-
 func (pm *PathwayMemory) StrengthenRoute(words []string) {
 	for i := 0; i < len(words)-1; i++ {
 		pm.Strengthen(words[i], words[i+1])
 	}
 }
-
 
 func (pm *PathwayMemory) GetStrength(fromWord, toWord string) float64 {
 	pm.mu.RLock()
@@ -175,13 +157,11 @@ func (pm *PathwayMemory) GetStrength(fromWord, toWord string) float64 {
 		return 0
 	}
 
-	
 	daysSinceUse := time.Since(pathway.LastUsed).Hours() / 24
 	decayFactor := math.Pow(1-pm.DecayRate, daysSinceUse)
 
 	return pathway.Strength * decayFactor
 }
-
 
 func (pm *PathwayMemory) GetOutgoingPathways(fromWord string) []*Pathway {
 	pm.mu.RLock()
@@ -193,7 +173,7 @@ func (pm *PathwayMemory) GetOutgoingPathways(fromWord string) []*Pathway {
 	result := make([]*Pathway, 0, len(keys))
 	for _, key := range keys {
 		if p := pm.Pathways[key]; p != nil {
-			
+
 			daysSinceUse := time.Since(p.LastUsed).Hours() / 24
 			decayFactor := math.Pow(1-pm.DecayRate, daysSinceUse)
 
@@ -206,36 +186,31 @@ func (pm *PathwayMemory) GetOutgoingPathways(fromWord string) []*Pathway {
 	return result
 }
 
-
 func (pm *PathwayMemory) SelectNextConcept(fromWord string, pressure PressureState, hashSeed []byte) string {
 	pathways := pm.GetOutgoingPathways(fromWord)
 	if len(pathways) == 0 {
 		return ""
 	}
 
-	
 	weights := make([]float64, len(pathways))
 	totalWeight := 0.0
 
 	for i, p := range pathways {
 		weight := p.Strength
 
-		
-		if pressure.Coherence > 0.5 {
-			
-			coherenceFactor := 1.0 + (pressure.Coherence-0.5)*2
+		if pressure.PauliX > 0.5 {
+
+			coherenceFactor := 1.0 + (pressure.PauliX-0.5)*2
 			weight = math.Pow(weight, 1/coherenceFactor)
 		}
 
-		
-		if pressure.Tension > 0.5 {
-			
-			tensionFactor := 1.0 + (pressure.Tension-0.5)*2
+		if pressure.PauliZ > 0.5 {
+
+			tensionFactor := 1.0 + (pressure.PauliZ-0.5)*2
 			weight = math.Pow(weight, tensionFactor)
 		}
 
-		
-		weight *= (0.5 + pressure.Magnitude*0.5)
+		weight *= (0.5 + pressure.Hadamard*0.5)
 
 		weights[i] = weight
 		totalWeight += weight
@@ -245,20 +220,18 @@ func (pm *PathwayMemory) SelectNextConcept(fromWord string, pressure PressureSta
 		return ""
 	}
 
-	
 	var selector float64
 	if len(hashSeed) >= 8 {
-		
+
 		var val uint64
 		for i := 0; i < 8; i++ {
 			val = (val << 8) | uint64(hashSeed[i])
 		}
 		selector = float64(val) / float64(^uint64(0))
 	} else {
-		selector = 0.5 
+		selector = 0.5
 	}
 
-	
 	threshold := selector * totalWeight
 	cumulative := 0.0
 	for i, w := range weights {
@@ -270,7 +243,6 @@ func (pm *PathwayMemory) SelectNextConcept(fromWord string, pressure PressureSta
 
 	return pathways[len(pathways)-1].ToWord
 }
-
 
 func (pm *PathwayMemory) Decay() int {
 	pm.mu.Lock()
@@ -289,12 +261,10 @@ func (pm *PathwayMemory) Decay() int {
 		}
 	}
 
-	
 	for _, key := range toDelete {
 		p := pm.Pathways[key]
 		delete(pm.Pathways, key)
 
-		
 		if keys, ok := pm.BySource[p.FromHash]; ok {
 			newKeys := make([]string, 0, len(keys)-1)
 			for _, k := range keys {
@@ -310,7 +280,6 @@ func (pm *PathwayMemory) Decay() int {
 
 	return pruned
 }
-
 
 func (pm *PathwayMemory) Stats() PathwayStats {
 	pm.mu.RLock()
@@ -347,7 +316,6 @@ func (pm *PathwayMemory) Stats() PathwayStats {
 	return stats
 }
 
-
 type PathwayStats struct {
 	TotalPathways     int     `json:"total_pathways"`
 	TotalActivations  int64   `json:"total_activations"`
@@ -357,10 +325,9 @@ type PathwayStats struct {
 	StrongestStrength float64 `json:"strongest_strength"`
 }
 
-
 type PressureState struct {
-	Magnitude float64 `json:"magnitude"` 
-	Coherence float64 `json:"coherence"` 
-	Tension   float64 `json:"tension"`   
-	Density   float64 `json:"density"`   
+	Hadamard float64 `json:"hadamard"`
+	PauliX   float64 `json:"pauliX"`
+	PauliZ   float64 `json:"pauliZ"`
+	Phase    float64 `json:"phase"`
 }

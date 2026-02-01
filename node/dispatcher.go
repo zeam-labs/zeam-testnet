@@ -1,5 +1,3 @@
-
-
 package node
 
 import (
@@ -13,25 +11,21 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-
 type DispatchResult struct {
-	Payload     []byte       
-	BroadcastTx common.Hash  
-	Hashes      []common.Hash 
-	HashBytes   [][]byte     
+	Payload     []byte
+	BroadcastTx common.Hash
+	Hashes      []common.Hash
+	HashBytes   [][]byte
 	StartTime   time.Time
 	Duration    time.Duration
 	PeerCount   int
 }
 
-
 type HashProcessor func(hash common.Hash, hashBytes []byte) bool
 
-
 type Dispatcher struct {
-	transport *HybridTransport
+	feed NetworkFeed
 
-	
 	mu         sync.Mutex
 	collecting bool
 	hashes     map[common.Hash]bool
@@ -40,24 +34,20 @@ type Dispatcher struct {
 	processor  HashProcessor
 	stopCh     chan struct{}
 
-	
 	collectTimeout time.Duration
 }
 
-
-func NewDispatcher(transport *HybridTransport) *Dispatcher {
+func NewDispatcher(feed NetworkFeed) *Dispatcher {
 	return &Dispatcher{
-		transport:      transport,
+		feed:           feed,
 		hashes:         make(map[common.Hash]bool),
 		collectTimeout: 30 * time.Second,
 	}
 }
 
-
 func (d *Dispatcher) SetTimeout(timeout time.Duration) {
 	d.collectTimeout = timeout
 }
-
 
 func (d *Dispatcher) Dispatch(ctx context.Context, payload []byte, processor HashProcessor) (*DispatchResult, error) {
 	d.mu.Lock()
@@ -66,7 +56,6 @@ func (d *Dispatcher) Dispatch(ctx context.Context, payload []byte, processor Has
 		return nil, ErrDispatchInProgress
 	}
 
-	
 	d.collecting = true
 	d.hashes = make(map[common.Hash]bool)
 	d.hashList = nil
@@ -84,40 +73,44 @@ func (d *Dispatcher) Dispatch(ctx context.Context, payload []byte, processor Has
 	result := &DispatchResult{
 		Payload:   payload,
 		StartTime: time.Now(),
-		PeerCount: d.transport.PeerCount(),
 	}
 
-	
-	originalHandler := d.transport.devp2p.OnTxHashReceived
-	d.transport.devp2p.OnTxHashReceived = func(hashes []common.Hash) {
-		d.collectHashes(hashes)
-		if originalHandler != nil {
-			originalHandler(hashes)
+	sub := d.feed.Subscribe(256)
+	defer sub.Unsubscribe()
+
+	go func() {
+		for {
+			select {
+			case event, ok := <-sub.C:
+				if !ok {
+					return
+				}
+				if event.Type == EventTxHashes {
+					d.collectHashes(event.Hashes)
+				}
+			case <-d.stopCh:
+				return
+			}
 		}
-	}
-	defer func() {
-		d.transport.devp2p.OnTxHashReceived = originalHandler
 	}()
 
-	
-	txHash, err := d.transport.BroadcastZEAM(payload)
-	if err != nil {
-		return nil, err
+	broadcastCh := d.feed.Broadcast(payload)
+	broadcastResult := <-broadcastCh
+	if broadcastResult.Err != nil {
+		return nil, broadcastResult.Err
 	}
-	result.BroadcastTx = txHash
+	result.BroadcastTx = broadcastResult.TxHash
 
-	
 	d.mu.Lock()
-	d.hashes[txHash] = true 
+	d.hashes[result.BroadcastTx] = true
 	d.mu.Unlock()
 
-	
 	timeout := time.After(d.collectTimeout)
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 
 	var firstHashTime time.Time
-	settleTime := 200 * time.Millisecond 
+	settleTime := 200 * time.Millisecond
 
 	for {
 		select {
@@ -137,12 +130,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, payload []byte, processor Has
 				goto done
 			}
 
-			
 			if hashCount > 0 {
 				if firstHashTime.IsZero() {
 					firstHashTime = time.Now()
 				} else if time.Since(firstHashTime) > settleTime {
-					
+
 					goto done
 				}
 			}
@@ -158,7 +150,6 @@ done:
 
 	return result, nil
 }
-
 
 func (d *Dispatcher) collectHashes(hashes []common.Hash) {
 	d.mu.Lock()
@@ -187,7 +178,6 @@ func (d *Dispatcher) collectHashes(hashes []common.Hash) {
 	}
 }
 
-
 func (d *Dispatcher) Stop() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -200,19 +190,16 @@ func (d *Dispatcher) Stop() {
 	}
 }
 
-
 func (d *Dispatcher) HashCount() int {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return len(d.hashList)
 }
 
-
 func HashMod(hashBytes []byte, n *big.Int) *big.Int {
 	h := new(big.Int).SetBytes(hashBytes)
 	return h.Mod(h, n)
 }
-
 
 func HashToUint64(hashBytes []byte) uint64 {
 	if len(hashBytes) < 8 {
@@ -221,14 +208,12 @@ func HashToUint64(hashBytes []byte) uint64 {
 	return binary.BigEndian.Uint64(hashBytes[:8])
 }
 
-
 func HashToByte(hashBytes []byte) byte {
 	if len(hashBytes) == 0 {
 		return 0
 	}
 	return hashBytes[0]
 }
-
 
 func HashXOR(a, b []byte) []byte {
 	if len(a) != len(b) {
@@ -240,7 +225,6 @@ func HashXOR(a, b []byte) []byte {
 	}
 	return result
 }
-
 
 func CombineHashes(hashes [][]byte) []byte {
 	if len(hashes) == 0 {
@@ -256,145 +240,33 @@ func CombineHashes(hashes [][]byte) []byte {
 	return crypto.Keccak256(combined)
 }
 
-
 func HashToCoordinate(hash common.Hash) *big.Int {
 	return new(big.Int).SetBytes(hash.Bytes())
 }
 
-
-var SemanticCategory = map[byte]string{
-	
-	
-}
-
-func init() {
-	for i := 0; i < 256; i++ {
-		b := byte(i)
-		switch {
-		case b < 0x20:
-			SemanticCategory[b] = "noun.object"
-		case b < 0x40:
-			SemanticCategory[b] = "verb.action"
-		case b < 0x60:
-			SemanticCategory[b] = "adj.property"
-		case b < 0x80:
-			SemanticCategory[b] = "noun.relation"
-		case b < 0xA0:
-			SemanticCategory[b] = "noun.quantity"
-		case b < 0xC0:
-			SemanticCategory[b] = "noun.state"
-		case b < 0xE0:
-			SemanticCategory[b] = "noun.event"
-		default:
-			SemanticCategory[b] = "noun.abstract"
-		}
-	}
-}
-
-
-func HashToSemantics(hashBytes []byte, count int) []string {
-	if count > len(hashBytes) {
-		count = len(hashBytes)
-	}
-	semantics := make([]string, count)
-	for i := 0; i < count; i++ {
-		semantics[i] = SemanticCategory[hashBytes[i]]
-	}
-	return semantics
-}
-
-
-func HashEntropy(data []byte) float64 {
-	if len(data) == 0 {
-		return 0
-	}
-
-	freq := make(map[byte]int)
-	for _, b := range data {
-		freq[b]++
-	}
-
-	var entropy float64
-	n := float64(len(data))
-	for _, count := range freq {
-		if count > 0 {
-			p := float64(count) / n
-			entropy -= p * log2(p)
-		}
-	}
-
-	return entropy / 8.0 
-}
-
-func log2(x float64) float64 {
-	if x <= 0 {
-		return 0
-	}
-	return ln(x) / 0.693147180559945
-}
-
-func ln(x float64) float64 {
-	if x <= 0 {
-		return 0
-	}
-	if x == 1 {
-		return 0
-	}
-
-	ln2 := 0.693147180559945
-	reductions := 0
-	for x > 2 {
-		x /= 2
-		reductions++
-	}
-
-	y := x - 1
-	result := 0.0
-	term := y
-	for i := 1; i <= 100; i++ {
-		if i%2 == 1 {
-			result += term / float64(i)
-		} else {
-			result -= term / float64(i)
-		}
-		term *= y
-		if term < 1e-15 && term > -1e-15 {
-			break
-		}
-	}
-
-	return result + float64(reductions)*ln2
-}
-
-
 type LiveCompute struct {
 	Dispatcher *Dispatcher
-	Transport  *HybridTransport
+	Feed       NetworkFeed
 }
 
-
-func NewLiveCompute(transport *HybridTransport) *LiveCompute {
+func NewLiveCompute(feed NetworkFeed) *LiveCompute {
 	return &LiveCompute{
-		Dispatcher: NewDispatcher(transport),
-		Transport:  transport,
+		Dispatcher: NewDispatcher(feed),
+		Feed:       feed,
 	}
 }
-
 
 func (lc *LiveCompute) SetTimeout(timeout time.Duration) {
 	lc.Dispatcher.SetTimeout(timeout)
 }
 
-
 func (lc *LiveCompute) Dispatch(ctx context.Context, payload []byte) (*DispatchResult, error) {
 	return lc.Dispatcher.Dispatch(ctx, payload, nil)
 }
 
-
 func (lc *LiveCompute) DispatchWithProcessor(ctx context.Context, payload []byte, processor HashProcessor) (*DispatchResult, error) {
 	return lc.Dispatcher.Dispatch(ctx, payload, processor)
 }
-
 
 var (
 	ErrDispatchInProgress = &dispatchError{"dispatch already in progress"}

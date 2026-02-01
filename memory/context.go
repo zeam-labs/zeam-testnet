@@ -1,5 +1,3 @@
-
-
 package memory
 
 import (
@@ -10,43 +8,34 @@ import (
 	"time"
 )
 
-
 type ConversationTurn struct {
-	Role      string    `json:"role"`      
-	Content   string    `json:"content"`   
-	Concepts  []string  `json:"concepts"`  
+	Role      string    `json:"role"`
+	Content   string    `json:"content"`
+	Concepts  []string  `json:"concepts"`
 	Timestamp time.Time `json:"timestamp"`
-	Pressure  PressureState `json:"pressure"` 
+	Pressure  PressureState `json:"pressure"`
 }
-
 
 type WorkingMemory struct {
 	mu sync.RWMutex
 
-	
 	Turns []ConversationTurn `json:"turns"`
 
-	
-	ActiveConcepts map[string]float64 `json:"active_concepts"` 
+	ActiveConcepts map[string]float64 `json:"active_concepts"`
 
-	
 	FocusStack []string `json:"focus_stack"`
 
-	
 	SessionID    string    `json:"session_id"`
 	SessionStart time.Time `json:"session_start"`
 	LastActivity time.Time `json:"last_activity"`
 
-	
-	MaxTurns       int     `json:"max_turns"`       
-	ConceptDecay   float64 `json:"concept_decay"`   
-	MaxConcepts    int     `json:"max_concepts"`    
+	MaxTurns       int     `json:"max_turns"`
+	ConceptDecay   float64 `json:"concept_decay"`
+	MaxConcepts    int     `json:"max_concepts"`
 	FocusStackSize int     `json:"focus_stack_size"`
 
-	
 	storagePath string
 }
-
 
 func NewWorkingMemory(storagePath string) *WorkingMemory {
 	return &WorkingMemory{
@@ -56,20 +45,18 @@ func NewWorkingMemory(storagePath string) *WorkingMemory {
 		SessionID:      generateSessionID(),
 		SessionStart:   time.Now(),
 		LastActivity:   time.Now(),
-		MaxTurns:       50,    
-		ConceptDecay:   0.8,   
-		MaxConcepts:    100,   
+		MaxTurns:       50,
+		ConceptDecay:   0.8,
+		MaxConcepts:    100,
 		FocusStackSize: 5,
 		storagePath:    storagePath,
 	}
 }
 
-
 func generateSessionID() string {
 	h := ConceptHash(time.Now().String())
 	return h[:16]
 }
-
 
 func LoadWorkingMemory(storagePath string) (*WorkingMemory, error) {
 	wm := NewWorkingMemory(storagePath)
@@ -78,7 +65,7 @@ func LoadWorkingMemory(storagePath string) (*WorkingMemory, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return wm, nil 
+			return wm, nil
 		}
 		return nil, err
 	}
@@ -89,13 +76,12 @@ func LoadWorkingMemory(storagePath string) (*WorkingMemory, error) {
 
 	wm.storagePath = storagePath
 
-	
 	if time.Since(wm.LastActivity) > time.Hour {
-		
+
 		wm.Turns = wm.Turns[:0]
 		wm.SessionID = generateSessionID()
 		wm.SessionStart = time.Now()
-		
+
 		for c := range wm.ActiveConcepts {
 			wm.ActiveConcepts[c] *= 0.3
 		}
@@ -103,7 +89,6 @@ func LoadWorkingMemory(storagePath string) (*WorkingMemory, error) {
 
 	return wm, nil
 }
-
 
 func (wm *WorkingMemory) Save() error {
 	wm.mu.RLock()
@@ -122,7 +107,6 @@ func (wm *WorkingMemory) Save() error {
 	return os.WriteFile(filePath, data, 0600)
 }
 
-
 func (wm *WorkingMemory) AddTurn(role, content string, concepts []string, pressure PressureState) {
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
@@ -135,7 +119,6 @@ func (wm *WorkingMemory) AddTurn(role, content string, concepts []string, pressu
 		Pressure:  pressure,
 	}
 
-	
 	for c := range wm.ActiveConcepts {
 		wm.ActiveConcepts[c] *= wm.ConceptDecay
 		if wm.ActiveConcepts[c] < 0.01 {
@@ -143,23 +126,18 @@ func (wm *WorkingMemory) AddTurn(role, content string, concepts []string, pressu
 		}
 	}
 
-	
 	for _, c := range concepts {
 		wm.ActiveConcepts[c] = 1.0
 	}
 
-	
 	if len(wm.ActiveConcepts) > wm.MaxConcepts {
 		wm.pruneWeakestConcepts()
 	}
 
-	
 	wm.updateFocus(concepts)
 
-	
 	wm.Turns = append(wm.Turns, turn)
 
-	
 	if len(wm.Turns) > wm.MaxTurns {
 		wm.Turns = wm.Turns[len(wm.Turns)-wm.MaxTurns:]
 	}
@@ -167,17 +145,15 @@ func (wm *WorkingMemory) AddTurn(role, content string, concepts []string, pressu
 	wm.LastActivity = time.Now()
 }
 
-
 func (wm *WorkingMemory) updateFocus(concepts []string) {
-	
+
 	newFocus := make([]string, 0, wm.FocusStackSize)
 
-	
 	for _, c := range concepts {
 		if len(newFocus) >= wm.FocusStackSize {
 			break
 		}
-		
+
 		found := false
 		for _, f := range newFocus {
 			if f == c {
@@ -190,7 +166,6 @@ func (wm *WorkingMemory) updateFocus(concepts []string) {
 		}
 	}
 
-	
 	for _, f := range wm.FocusStack {
 		if len(newFocus) >= wm.FocusStackSize {
 			break
@@ -210,9 +185,8 @@ func (wm *WorkingMemory) updateFocus(concepts []string) {
 	wm.FocusStack = newFocus
 }
 
-
 func (wm *WorkingMemory) pruneWeakestConcepts() {
-	
+
 	type weightedConcept struct {
 		concept string
 		weight  float64
@@ -222,7 +196,6 @@ func (wm *WorkingMemory) pruneWeakestConcepts() {
 		list = append(list, weightedConcept{c, w})
 	}
 
-	
 	for i := 0; i < len(list)-1; i++ {
 		for j := i + 1; j < len(list); j++ {
 			if list[j].weight < list[i].weight {
@@ -231,18 +204,15 @@ func (wm *WorkingMemory) pruneWeakestConcepts() {
 		}
 	}
 
-	
 	for i := 0; len(wm.ActiveConcepts) > wm.MaxConcepts && i < len(list); i++ {
 		delete(wm.ActiveConcepts, list[i].concept)
 	}
 }
 
-
 func (wm *WorkingMemory) GetActiveConcepts() map[string]float64 {
 	wm.mu.RLock()
 	defer wm.mu.RUnlock()
 
-	
 	result := make(map[string]float64, len(wm.ActiveConcepts))
 	for c, w := range wm.ActiveConcepts {
 		result[c] = w
@@ -250,12 +220,10 @@ func (wm *WorkingMemory) GetActiveConcepts() map[string]float64 {
 	return result
 }
 
-
 func (wm *WorkingMemory) GetTopConcepts(n int) []string {
 	wm.mu.RLock()
 	defer wm.mu.RUnlock()
 
-	
 	type weightedConcept struct {
 		concept string
 		weight  float64
@@ -265,7 +233,6 @@ func (wm *WorkingMemory) GetTopConcepts(n int) []string {
 		list = append(list, weightedConcept{c, w})
 	}
 
-	
 	for i := 0; i < len(list)-1; i++ {
 		for j := i + 1; j < len(list); j++ {
 			if list[j].weight > list[i].weight {
@@ -274,14 +241,12 @@ func (wm *WorkingMemory) GetTopConcepts(n int) []string {
 		}
 	}
 
-	
 	result := make([]string, 0, n)
 	for i := 0; i < n && i < len(list); i++ {
 		result = append(result, list[i].concept)
 	}
 	return result
 }
-
 
 func (wm *WorkingMemory) GetFocus() []string {
 	wm.mu.RLock()
@@ -291,7 +256,6 @@ func (wm *WorkingMemory) GetFocus() []string {
 	copy(result, wm.FocusStack)
 	return result
 }
-
 
 func (wm *WorkingMemory) GetRecentTurns(n int) []ConversationTurn {
 	wm.mu.RLock()
@@ -306,7 +270,6 @@ func (wm *WorkingMemory) GetRecentTurns(n int) []ConversationTurn {
 	return result
 }
 
-
 func (wm *WorkingMemory) GetLastUserMessage() (string, []string, bool) {
 	wm.mu.RLock()
 	defer wm.mu.RUnlock()
@@ -318,7 +281,6 @@ func (wm *WorkingMemory) GetLastUserMessage() (string, []string, bool) {
 	}
 	return "", nil, false
 }
-
 
 func (wm *WorkingMemory) GetLastResponse() (string, []string, bool) {
 	wm.mu.RLock()
@@ -332,7 +294,6 @@ func (wm *WorkingMemory) GetLastResponse() (string, []string, bool) {
 	return "", nil, false
 }
 
-
 func (wm *WorkingMemory) Clear() {
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
@@ -344,7 +305,6 @@ func (wm *WorkingMemory) Clear() {
 	wm.SessionStart = time.Now()
 	wm.LastActivity = time.Now()
 }
-
 
 func (wm *WorkingMemory) Stats() WorkingMemoryStats {
 	wm.mu.RLock()
@@ -359,7 +319,6 @@ func (wm *WorkingMemory) Stats() WorkingMemoryStats {
 		LastActivity:   time.Since(wm.LastActivity),
 	}
 }
-
 
 type WorkingMemoryStats struct {
 	SessionID      string        `json:"session_id"`

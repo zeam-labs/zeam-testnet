@@ -1,5 +1,3 @@
-
-
 package ngac
 
 import (
@@ -10,40 +8,35 @@ import (
 	"zeam/quantum"
 )
 
-
 type SemanticAtom struct {
-	Concept   string  
-	Intensity float64 
-	Valence   float64 
+	Concept   string
+	Intensity float64
+	Valence   float64
 }
 
-
 type SemanticState struct {
-	QuantumValue *big.Int 
-	Intent       string   
-	Message      string   
-	Confidence   float64  
+	QuantumValue *big.Int
+	Intent       string
+	Message      string
+	Confidence   float64
 	Atoms        []SemanticAtom
 }
 
-
 type SemanticField struct {
-	Domain  string                   
-	States  []SemanticState          
-	Decoder map[string]SemanticState 
-	Genesis [32]byte                 
+	Domain  string
+	States  []SemanticState
+	Decoder map[string]SemanticState
+	Genesis [32]byte
 }
-
 
 type Example struct {
-	Concept   string   
-	Intensity float64  
-	Valence   float64  
-	Intent    string   
-	Message   string   
-	Contexts  []string 
+	Concept   string
+	Intensity float64
+	Valence   float64
+	Intent    string
+	Message   string
+	Contexts  []string
 }
-
 
 func BuildSemanticField(sc *quantum.SubstrateChain, domain string, examples []Example) *SemanticField {
 	field := &SemanticField{
@@ -59,18 +52,16 @@ func BuildSemanticField(sc *quantum.SubstrateChain, domain string, examples []Ex
 	fmt.Printf("[NGAC] Building semantic field: %s\n", domain)
 	fmt.Printf("[NGAC] Training examples: %d\n", len(examples))
 
-	
 	for i, ex := range examples {
-		
+
 		contexts := buildContexts(ex)
 
-		
 		contract := quantum.QuantumContract{
 			Contexts:  contexts,
-			InitState: fmt.Sprintf("%d", i*1000000), 
+			InitState: fmt.Sprintf("%d", i*1000000),
 			Transform: "affine",
 			Branch:    "affine4",
-			T:         8, 
+			T:         8,
 			K:         128,
 			Phase:     "alt",
 		}
@@ -81,18 +72,16 @@ func BuildSemanticField(sc *quantum.SubstrateChain, domain string, examples []Ex
 			continue
 		}
 
-		
 		state := SemanticState{
 			QuantumValue: result.Result,
 			Intent:       ex.Intent,
 			Message:      ex.Message,
-			Confidence:   result.Pressure.Coherence,
+			Confidence:   result.Pressure.PauliX,
 			Atoms: []SemanticAtom{
 				{Concept: ex.Concept, Intensity: ex.Intensity, Valence: ex.Valence},
 			},
 		}
 
-		
 		stateKey := result.Result.String()
 		field.States = append(field.States, state)
 		field.Decoder[stateKey] = state
@@ -102,7 +91,6 @@ func BuildSemanticField(sc *quantum.SubstrateChain, domain string, examples []Ex
 		}
 	}
 
-	
 	if sc != nil {
 		fieldBytes, _ := json.Marshal(field)
 		sc.MintEvent("SEMANTIC_FIELD_BUILT", fmt.Sprintf("domain=%s,states=%d", domain, len(field.States)))
@@ -113,19 +101,15 @@ func BuildSemanticField(sc *quantum.SubstrateChain, domain string, examples []Ex
 	return field
 }
 
-
 func buildContexts(ex Example) []string {
 	contexts := make([]string, 0, 5)
 
-	
 	contexts = append(contexts, ex.Contexts...)
 
-	
 	if ex.Intensity > 0 {
 		contexts = append(contexts, fmt.Sprintf("mul:%d", int(ex.Intensity*10)+1))
 	}
 
-	
 	if ex.Valence != 0 {
 		if ex.Valence > 0 {
 			contexts = append(contexts, fmt.Sprintf("add:%d", int(ex.Valence*1000)))
@@ -134,15 +118,13 @@ func buildContexts(ex Example) []string {
 		}
 	}
 
-	
 	contexts = append(contexts, "dom:"+ex.Concept)
 
 	return contexts
 }
 
-
 func (field *SemanticField) MeasureSemantics(sc *quantum.SubstrateChain, pressure quantum.PressureMetrics, seed []byte) SemanticState {
-	
+
 	seedVal := int64(0)
 	for i, b := range seed {
 		if i >= 8 {
@@ -151,75 +133,62 @@ func (field *SemanticField) MeasureSemantics(sc *quantum.SubstrateChain, pressur
 		seedVal = seedVal*256 + int64(b)
 	}
 
-	
 	contract := quantum.QuantumContract{
 		Contexts:  encodePressureContext(pressure, field.Domain),
 		InitState: encodePressureStateWithSeed(pressure, seedVal),
 		Transform: "affine",
 		Branch:    "affine4",
-		T:         12, 
+		T:         12,
 		K:         256,
 		Phase:     "alt",
 	}
 
-	
 	contractID := quantum.DeployContract(contract)
 	result, _ := quantum.ExecuteContract(sc, contractID)
 
-	
 	collapsedValue := result.Result.String()
 
-	
 	if state, exists := field.Decoder[collapsedValue]; exists {
-		
+
 		return state
 	}
 
-	
 	return field.FindNearestMessage(result.Result, pressure, seed)
 }
-
 
 func encodePressureContext(p quantum.PressureMetrics, domain string) []string {
 	contexts := make([]string, 0, 5)
 
-	
-	mag := int(p.Magnitude * 10)
+	mag := int(p.Hadamard * 10)
 	if mag < 1 {
 		mag = 1
 	}
 	contexts = append(contexts, fmt.Sprintf("mul:%d", mag))
 
-	
-	coh := int(p.Coherence * 1000)
+	coh := int(p.PauliX * 1000)
 	contexts = append(contexts, fmt.Sprintf("add:%d", coh))
 
-	
-	if p.Tension > 0.01 {
-		ten := int(p.Tension * 100)
+	if p.PauliZ > 0.01 {
+		ten := int(p.PauliZ * 100)
 		contexts = append(contexts, fmt.Sprintf("scale:%d", ten))
 	}
 
-	
-	contexts = append(contexts, fmt.Sprintf("dom:%s-%.2f", domain, p.Density))
+	contexts = append(contexts, fmt.Sprintf("dom:%s-%.2f", domain, p.Phase))
 
 	return contexts
 }
 
-
 func encodePressureState(p quantum.PressureMetrics) string {
-	
-	combined := int(p.Magnitude*1000000 + p.Density*10000 + p.Coherence*100)
+
+	combined := int(p.Hadamard*1000000 + p.Phase*10000 + p.PauliX*100)
 	return fmt.Sprintf("%d", combined)
 }
-
 
 func encodePressureStateWithSeed(p quantum.PressureMetrics, seed int64) string {
-	
-	combined := int64(p.Magnitude*1000000+p.Density*10000+p.Coherence*100) + (seed % 10000000)
+
+	combined := int64(p.Hadamard*1000000+p.Phase*10000+p.PauliX*100) + (seed % 10000000)
 	return fmt.Sprintf("%d", combined)
 }
-
 
 func (field *SemanticField) FindNearestMessage(quantumValue *big.Int, pressure quantum.PressureMetrics, seed []byte) SemanticState {
 	if len(field.States) == 0 {
@@ -229,7 +198,6 @@ func (field *SemanticField) FindNearestMessage(quantumValue *big.Int, pressure q
 		}
 	}
 
-	
 	type scoredState struct {
 		state SemanticState
 		score float64
@@ -244,17 +212,13 @@ func (field *SemanticField) FindNearestMessage(quantumValue *big.Int, pressure q
 
 		atom := state.Atoms[0]
 
-		
-		intensityMatch := 1.0 - abs(pressure.Magnitude-atom.Intensity)
+		intensityMatch := 1.0 - abs(pressure.Hadamard-atom.Intensity)
 
-		
-		valenceTarget := 0.5 - pressure.Tension
+		valenceTarget := 0.5 - pressure.PauliZ
 		valenceMatch := 1.0 - abs(valenceTarget-atom.Valence)/2.0
 
-		
-		coherenceMatch := 1.0 - abs(pressure.Coherence-state.Confidence)
+		coherenceMatch := 1.0 - abs(pressure.PauliX-state.Confidence)
 
-		
 		score := intensityMatch*0.4 + valenceMatch*0.3 + coherenceMatch*0.3
 
 		candidates = append(candidates, scoredState{state: state, score: score})
@@ -267,7 +231,6 @@ func (field *SemanticField) FindNearestMessage(quantumValue *big.Int, pressure q
 		}
 	}
 
-	
 	for i := 0; i < len(candidates); i++ {
 		for j := i + 1; j < len(candidates); j++ {
 			if candidates[j].score > candidates[i].score {
@@ -276,13 +239,11 @@ func (field *SemanticField) FindNearestMessage(quantumValue *big.Int, pressure q
 		}
 	}
 
-	
 	topN := 5
 	if len(candidates) < topN {
 		topN = len(candidates)
 	}
 
-	
 	seedHash := 0
 	for _, b := range seed {
 		seedHash = seedHash*31 + int(b)
@@ -293,7 +254,7 @@ func (field *SemanticField) FindNearestMessage(quantumValue *big.Int, pressure q
 
 	selectedIdx := seedHash % topN
 	selected := candidates[selectedIdx].state
-	selected.Confidence *= 0.8 
+	selected.Confidence *= 0.8
 
 	return selected
 }
@@ -305,10 +266,9 @@ func abs(x float64) float64 {
 	return x
 }
 
-
 func DefaultSpeechExamples() []Example {
 	return []Example{
-		
+
 		{
 			Concept:   "urgency-critical",
 			Intensity: 1.0,
@@ -342,7 +302,6 @@ func DefaultSpeechExamples() []Example {
 			Contexts:  []string{"mul:2", "dom:stable"},
 		},
 
-		
 		{
 			Concept:   "analysis-route",
 			Intensity: 0.7,
@@ -376,7 +335,6 @@ func DefaultSpeechExamples() []Example {
 			Contexts:  []string{"mul:6", "dom:search"},
 		},
 
-		
 		{
 			Concept:   "decision-confirmed",
 			Intensity: 0.9,
@@ -402,7 +360,6 @@ func DefaultSpeechExamples() []Example {
 			Contexts:  []string{"mul:3", "dom:wait"},
 		},
 
-		
 		{
 			Concept:   "status-normal",
 			Intensity: 0.3,
@@ -428,7 +385,6 @@ func DefaultSpeechExamples() []Example {
 			Contexts:  []string{"mul:6", "dom:converge"},
 		},
 
-		
 		{
 			Concept:   "coord-mesh",
 			Intensity: 0.5,
@@ -446,7 +402,6 @@ func DefaultSpeechExamples() []Example {
 			Contexts:  []string{"mul:7", "dom:interference"},
 		},
 
-		
 		{
 			Concept:   "reflect-history",
 			Intensity: 0.4,
@@ -464,7 +419,6 @@ func DefaultSpeechExamples() []Example {
 			Contexts:  []string{"mul:5", "dom:metrics"},
 		},
 
-		
 		{
 			Concept:   "learn-adaptation",
 			Intensity: 0.6,
@@ -482,7 +436,6 @@ func DefaultSpeechExamples() []Example {
 			Contexts:  []string{"mul:8", "dom:discover"},
 		},
 
-		
 		{
 			Concept:   "trade-opportunity",
 			Intensity: 0.8,
@@ -516,7 +469,6 @@ func DefaultSpeechExamples() []Example {
 			Contexts:  []string{"mul:6", "dom:risk"},
 		},
 
-		
 		{
 			Concept:   "market-volatile",
 			Intensity: 0.7,

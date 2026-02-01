@@ -1,5 +1,3 @@
-
-
 package memory
 
 import (
@@ -14,51 +12,41 @@ import (
 	"time"
 )
 
-
 type Engram struct {
-	ID        string    `json:"id"`        
-	Concepts  []string  `json:"concepts"`  
-	Hashes    []string  `json:"hashes"`    
-	Strength  float64   `json:"strength"`  
-	Resonance float64   `json:"resonance"` 
+	ID        string    `json:"id"`
+	Concepts  []string  `json:"concepts"`
+	Hashes    []string  `json:"hashes"`
+	Strength  float64   `json:"strength"`
+	Resonance float64   `json:"resonance"`
 	Created   time.Time `json:"created"`
 	LastUsed  time.Time `json:"last_used"`
 	Activations int     `json:"activations"`
 
-	
 	FormationPressure PressureState `json:"formation_pressure"`
 
-	
 	Context map[string]string `json:"context,omitempty"`
 }
-
 
 type EngramMemory struct {
 	mu sync.RWMutex
 
-	
 	Engrams map[string]*Engram `json:"engrams"`
 
-	
 	ConceptIndex map[string][]string `json:"concept_index"`
 
-	
 	TotalEngrams     int       `json:"total_engrams"`
 	TotalActivations int64     `json:"total_activations"`
 	CreatedAt        time.Time `json:"created_at"`
 	LastModified     time.Time `json:"last_modified"`
 
-	
-	DecayRate        float64 `json:"decay_rate"`        
-	ResonanceDecay   float64 `json:"resonance_decay"`   
-	MinStrength      float64 `json:"min_strength"`      
-	MaxEngrams       int     `json:"max_engrams"`       
-	MinConceptsMatch int     `json:"min_concepts_match"` 
+	DecayRate        float64 `json:"decay_rate"`
+	ResonanceDecay   float64 `json:"resonance_decay"`
+	MinStrength      float64 `json:"min_strength"`
+	MaxEngrams       int     `json:"max_engrams"`
+	MinConceptsMatch int     `json:"min_concepts_match"`
 
-	
 	storagePath string
 }
-
 
 func NewEngramMemory(storagePath string) *EngramMemory {
 	return &EngramMemory{
@@ -66,15 +54,14 @@ func NewEngramMemory(storagePath string) *EngramMemory {
 		ConceptIndex:     make(map[string][]string),
 		CreatedAt:        time.Now(),
 		LastModified:     time.Now(),
-		DecayRate:        0.02,  
-		ResonanceDecay:   0.01,  
+		DecayRate:        0.02,
+		ResonanceDecay:   0.01,
 		MinStrength:      0.01,
-		MaxEngrams:       10000, 
-		MinConceptsMatch: 2,     
+		MaxEngrams:       10000,
+		MinConceptsMatch: 2,
 		storagePath:      storagePath,
 	}
 }
-
 
 func LoadEngramMemory(storagePath string) (*EngramMemory, error) {
 	em := NewEngramMemory(storagePath)
@@ -83,7 +70,7 @@ func LoadEngramMemory(storagePath string) (*EngramMemory, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return em, nil 
+			return em, nil
 		}
 		return nil, err
 	}
@@ -95,7 +82,6 @@ func LoadEngramMemory(storagePath string) (*EngramMemory, error) {
 	em.storagePath = storagePath
 	return em, nil
 }
-
 
 func (em *EngramMemory) Save() error {
 	em.mu.RLock()
@@ -116,14 +102,12 @@ func (em *EngramMemory) Save() error {
 	return os.WriteFile(filePath, data, 0600)
 }
 
-
 func generateEngramID(concepts []string) string {
-	
+
 	sorted := make([]string, len(concepts))
 	copy(sorted, concepts)
 	sort.Strings(sorted)
 
-	
 	combined := ""
 	for _, c := range sorted {
 		combined += c + "|"
@@ -132,21 +116,19 @@ func generateEngramID(concepts []string) string {
 	return hex.EncodeToString(h[:12])
 }
 
-
 func (em *EngramMemory) Store(concepts []string, pressure PressureState, context map[string]string) *Engram {
 	if len(concepts) < 2 {
-		return nil 
+		return nil
 	}
 
 	em.mu.Lock()
 	defer em.mu.Unlock()
 
-	
 	id := generateEngramID(concepts)
 
 	engram, exists := em.Engrams[id]
 	if exists {
-		
+
 		engram.Strength += 0.1
 		if engram.Strength > 1.0 {
 			engram.Strength = 1.0
@@ -158,7 +140,6 @@ func (em *EngramMemory) Store(concepts []string, pressure PressureState, context
 		engram.Activations++
 		engram.LastUsed = time.Now()
 
-		
 		if engram.Context == nil {
 			engram.Context = make(map[string]string)
 		}
@@ -166,7 +147,7 @@ func (em *EngramMemory) Store(concepts []string, pressure PressureState, context
 			engram.Context[k] = v
 		}
 	} else {
-		
+
 		hashes := make([]string, len(concepts))
 		for i, c := range concepts {
 			hashes[i] = ConceptHash(c)
@@ -176,8 +157,8 @@ func (em *EngramMemory) Store(concepts []string, pressure PressureState, context
 			ID:                id,
 			Concepts:          concepts,
 			Hashes:            hashes,
-			Strength:          0.3, 
-			Resonance:         0.5, 
+			Strength:          0.3,
+			Resonance:         0.5,
 			Created:           time.Now(),
 			LastUsed:          time.Now(),
 			Activations:       1,
@@ -187,12 +168,10 @@ func (em *EngramMemory) Store(concepts []string, pressure PressureState, context
 		em.Engrams[id] = engram
 		em.TotalEngrams++
 
-		
 		for _, hash := range hashes {
 			em.ConceptIndex[hash] = append(em.ConceptIndex[hash], id)
 		}
 
-		
 		if len(em.Engrams) > em.MaxEngrams {
 			em.pruneWeakest()
 		}
@@ -202,26 +181,22 @@ func (em *EngramMemory) Store(concepts []string, pressure PressureState, context
 	return engram
 }
 
-
 func (em *EngramMemory) Resonate(concepts []string, pressure PressureState) []ResonanceResult {
 	em.mu.RLock()
 	defer em.mu.RUnlock()
 
-	
 	inputHashes := make(map[string]bool)
 	for _, c := range concepts {
 		inputHashes[ConceptHash(c)] = true
 	}
 
-	
-	candidates := make(map[string]int) 
+	candidates := make(map[string]int)
 	for hash := range inputHashes {
 		for _, engramID := range em.ConceptIndex[hash] {
 			candidates[engramID]++
 		}
 	}
 
-	
 	results := make([]ResonanceResult, 0)
 	for engramID, matchCount := range candidates {
 		if matchCount < em.MinConceptsMatch {
@@ -233,9 +208,8 @@ func (em *EngramMemory) Resonate(concepts []string, pressure PressureState) []Re
 			continue
 		}
 
-		
 		score := em.calculateResonance(engram, matchCount, len(inputHashes), pressure)
-		if score > 0.1 { 
+		if score > 0.1 {
 			results = append(results, ResonanceResult{
 				Engram:     engram,
 				Score:      score,
@@ -244,7 +218,6 @@ func (em *EngramMemory) Resonate(concepts []string, pressure PressureState) []Re
 		}
 	}
 
-	
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Score > results[j].Score
 	})
@@ -252,47 +225,40 @@ func (em *EngramMemory) Resonate(concepts []string, pressure PressureState) []Re
 	return results
 }
 
-
 func (em *EngramMemory) calculateResonance(engram *Engram, matchCount, inputCount int, pressure PressureState) float64 {
-	
+
 	overlapRatio := float64(matchCount) / float64(len(engram.Concepts))
 	inputCoverage := float64(matchCount) / float64(inputCount)
 	baseScore := (overlapRatio + inputCoverage) / 2
 
-	
 	daysSinceUse := time.Since(engram.LastUsed).Hours() / 24
 	decayedResonance := engram.Resonance * math.Pow(1-em.ResonanceDecay, daysSinceUse)
 
-	
 	decayedStrength := engram.Strength * math.Pow(1-em.DecayRate, daysSinceUse)
 
 	score := baseScore * decayedResonance * decayedStrength
 
-	
 	pressureSimilarity := em.pressureSimilarity(engram.FormationPressure, pressure)
-	if pressure.Coherence > 0.5 {
+	if pressure.PauliX > 0.5 {
 		score *= (0.5 + pressureSimilarity*0.5)
 	}
 
-	
-	if pressure.Tension > 0.5 {
-		score *= (1.5 - pressure.Tension)
+	if pressure.PauliZ > 0.5 {
+		score *= (1.5 - pressure.PauliZ)
 	}
 
 	return score
 }
 
-
 func (em *EngramMemory) pressureSimilarity(a, b PressureState) float64 {
-	dM := math.Abs(a.Magnitude - b.Magnitude)
-	dC := math.Abs(a.Coherence - b.Coherence)
-	dT := math.Abs(a.Tension - b.Tension)
-	dD := math.Abs(a.Density - b.Density)
+	dM := math.Abs(a.Hadamard - b.Hadamard)
+	dC := math.Abs(a.PauliX - b.PauliX)
+	dT := math.Abs(a.PauliZ - b.PauliZ)
+	dD := math.Abs(a.Phase - b.Phase)
 
 	avgDiff := (dM + dC + dT + dD) / 4
 	return 1 - avgDiff
 }
-
 
 func (em *EngramMemory) ActivateEngram(engramID string) {
 	em.mu.Lock()
@@ -313,17 +279,15 @@ func (em *EngramMemory) ActivateEngram(engramID string) {
 	}
 }
 
-
 func (em *EngramMemory) GetAssociatedConcepts(concepts []string, pressure PressureState, maxResults int) []string {
 	resonating := em.Resonate(concepts, pressure)
 
-	
 	inputSet := make(map[string]bool)
 	for _, c := range concepts {
 		inputSet[c] = true
 	}
 
-	associated := make(map[string]float64) 
+	associated := make(map[string]float64)
 	for _, result := range resonating {
 		for _, c := range result.Engram.Concepts {
 			if !inputSet[c] {
@@ -332,7 +296,6 @@ func (em *EngramMemory) GetAssociatedConcepts(concepts []string, pressure Pressu
 		}
 	}
 
-	
 	type scoredConcept struct {
 		concept string
 		score   float64
@@ -345,7 +308,6 @@ func (em *EngramMemory) GetAssociatedConcepts(concepts []string, pressure Pressu
 		return scored[i].score > scored[j].score
 	})
 
-	
 	result := make([]string, 0, maxResults)
 	for i := 0; i < len(scored) && i < maxResults; i++ {
 		result = append(result, scored[i].concept)
@@ -354,9 +316,7 @@ func (em *EngramMemory) GetAssociatedConcepts(concepts []string, pressure Pressu
 	return result
 }
 
-
 func (em *EngramMemory) pruneWeakest() {
-	
 
 	type scored struct {
 		id    string
@@ -370,12 +330,10 @@ func (em *EngramMemory) pruneWeakest() {
 		scores = append(scores, scored{id, decayedStrength})
 	}
 
-	
 	sort.Slice(scores, func(i, j int) bool {
 		return scores[i].score < scores[j].score
 	})
 
-	
 	toRemove := len(scores) / 10
 	if toRemove < 1 {
 		toRemove = 1
@@ -386,14 +344,12 @@ func (em *EngramMemory) pruneWeakest() {
 	}
 }
 
-
 func (em *EngramMemory) removeEngram(id string) {
 	engram, ok := em.Engrams[id]
 	if !ok {
 		return
 	}
 
-	
 	for _, hash := range engram.Hashes {
 		if ids, ok := em.ConceptIndex[hash]; ok {
 			newIDs := make([]string, 0, len(ids)-1)
@@ -409,7 +365,6 @@ func (em *EngramMemory) removeEngram(id string) {
 	delete(em.Engrams, id)
 	em.TotalEngrams--
 }
-
 
 func (em *EngramMemory) Decay() int {
 	em.mu.Lock()
@@ -435,7 +390,6 @@ func (em *EngramMemory) Decay() int {
 
 	return pruned
 }
-
 
 func (em *EngramMemory) Stats() EngramStats {
 	em.mu.RLock()
@@ -472,13 +426,11 @@ func (em *EngramMemory) Stats() EngramStats {
 	return stats
 }
 
-
 type ResonanceResult struct {
 	Engram     *Engram `json:"engram"`
 	Score      float64 `json:"score"`
 	MatchCount int     `json:"match_count"`
 }
-
 
 type EngramStats struct {
 	TotalEngrams      int      `json:"total_engrams"`

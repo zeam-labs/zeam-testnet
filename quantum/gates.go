@@ -11,7 +11,6 @@ import (
 var gateLog *log.Logger
 var gateLogOnce sync.Once
 
-
 func InitGateLog() {
 	gateLogOnce.Do(func() {
 		file, err := os.OpenFile("gates.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
@@ -22,13 +21,11 @@ func InitGateLog() {
 	})
 }
 
-
 type Gate struct {
-	Position    int    
-	Restriction int    
-	Type        string 
+	Position    int
+	Restriction int
+	Type        string
 }
-
 
 func Hadamard(state QuantumState) QuantumState {
 	newAmp0 := (state.Amplitude + state.Phase) / math.Sqrt(2)
@@ -41,7 +38,6 @@ func Hadamard(state QuantumState) QuantumState {
 	}
 }
 
-
 func PauliX(state QuantumState) QuantumState {
 	return QuantumState{
 		Amplitude: state.Phase,
@@ -49,7 +45,6 @@ func PauliX(state QuantumState) QuantumState {
 		PushTime:  time.Now(),
 	}
 }
-
 
 func PauliZ(state QuantumState) QuantumState {
 	return QuantumState{
@@ -59,7 +54,6 @@ func PauliZ(state QuantumState) QuantumState {
 	}
 }
 
-
 func CNOT(control, target QuantumState) QuantumState {
 	if control.Amplitude > 0.5 {
 		return PauliX(target)
@@ -67,9 +61,8 @@ func CNOT(control, target QuantumState) QuantumState {
 	return target
 }
 
-
 func (g *Gate) Apply(pressure int, chainID string) bool {
-	
+
 	if pressure < g.Restriction/32 {
 		return false
 	}
@@ -106,11 +99,10 @@ func (g *Gate) Apply(pressure int, chainID string) bool {
 	return false
 }
 
-
 func (g *Gate) StartGateMonitor(chainID string, getPressure func() int, stopCh <-chan struct{}) {
 	freq := GetChainFrequency(chainID)
 	if freq == 0 {
-		freq = 1.0 
+		freq = 1.0
 	}
 
 	interval := time.Duration(float64(time.Second) / freq)

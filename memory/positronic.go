@@ -1,5 +1,3 @@
-
-
 package memory
 
 import (
@@ -11,37 +9,30 @@ import (
 	"time"
 )
 
-
 type PositronicBrain struct {
 	mu sync.RWMutex
 
-	
 	Pathways *PathwayMemory
 	Engrams  *EngramMemory
 	Context  *WorkingMemory
 
-	
 	Pressure PressureState
 
-	
 	ForkID       string    `json:"fork_id"`
 	CreatedAt    time.Time `json:"created_at"`
 	LastActivity time.Time `json:"last_activity"`
 
-	
 	storagePath string
 
-	
 	conceptExtractor func(text string) []string
 }
-
 
 func NewPositronicBrain(storagePath string, forkID string) *PositronicBrain {
 	return &PositronicBrain{
 		Pathways:     NewPathwayMemory(storagePath),
 		Engrams:      NewEngramMemory(storagePath),
 		Context:      NewWorkingMemory(storagePath),
-		Pressure:     PressureState{Magnitude: 0.5, Coherence: 0.5, Tension: 0.5, Density: 0.5},
+		Pressure:     PressureState{Hadamard: 0.5, PauliX: 0.5, PauliZ: 0.5, Phase: 0.5},
 		ForkID:       forkID,
 		CreatedAt:    time.Now(),
 		LastActivity: time.Now(),
@@ -49,11 +40,9 @@ func NewPositronicBrain(storagePath string, forkID string) *PositronicBrain {
 	}
 }
 
-
 func LoadPositronicBrain(storagePath string, forkID string) (*PositronicBrain, error) {
 	brain := NewPositronicBrain(storagePath, forkID)
 
-	
 	var err error
 
 	brain.Pathways, err = LoadPathwayMemory(storagePath)
@@ -71,7 +60,6 @@ func LoadPositronicBrain(storagePath string, forkID string) (*PositronicBrain, e
 		return nil, err
 	}
 
-	
 	metaPath := filepath.Join(storagePath, "brain.json")
 	if data, err := os.ReadFile(metaPath); err == nil {
 		json.Unmarshal(data, brain)
@@ -83,13 +71,11 @@ func LoadPositronicBrain(storagePath string, forkID string) (*PositronicBrain, e
 	return brain, nil
 }
 
-
 func (b *PositronicBrain) Save() error {
 	b.mu.Lock()
 	b.LastActivity = time.Now()
 	b.mu.Unlock()
 
-	
 	if err := b.Pathways.Save(); err != nil {
 		return err
 	}
@@ -100,7 +86,6 @@ func (b *PositronicBrain) Save() error {
 		return err
 	}
 
-	
 	if err := os.MkdirAll(b.storagePath, 0700); err != nil {
 		return err
 	}
@@ -124,13 +109,11 @@ func (b *PositronicBrain) Save() error {
 	return os.WriteFile(metaPath, data, 0600)
 }
 
-
 func (b *PositronicBrain) SetConceptExtractor(fn func(text string) []string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.conceptExtractor = fn
 }
-
 
 func (b *PositronicBrain) SetPressure(p PressureState) {
 	b.mu.Lock()
@@ -138,13 +121,11 @@ func (b *PositronicBrain) SetPressure(p PressureState) {
 	b.Pressure = p
 }
 
-
 func (b *PositronicBrain) GetPressure() PressureState {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.Pressure
 }
-
 
 func (b *PositronicBrain) ProcessInput(text string) (*InputProcessingResult, error) {
 	b.mu.Lock()
@@ -155,29 +136,23 @@ func (b *PositronicBrain) ProcessInput(text string) (*InputProcessingResult, err
 		Timestamp:    time.Now(),
 	}
 
-	
 	concepts := b.extractConcepts(text)
 	result.ExtractedConcepts = concepts
 
-	
 	b.Context.AddTurn("user", text, concepts, b.Pressure)
 
-	
 	resonating := b.Engrams.Resonate(concepts, b.Pressure)
 	result.ResonatingEngrams = resonating
 
-	
 	associated := b.Engrams.GetAssociatedConcepts(concepts, b.Pressure, 10)
 	result.AssociatedConcepts = associated
 
-	
 	for _, r := range resonating {
-		if r.Score > 0.3 { 
+		if r.Score > 0.3 {
 			b.Engrams.ActivateEngram(r.Engram.ID)
 		}
 	}
 
-	
 	pathwaySuggestions := make(map[string]float64)
 	for _, c := range concepts {
 		next := b.Pathways.SelectNextConcept(c, b.Pressure, nil)
@@ -191,7 +166,6 @@ func (b *PositronicBrain) ProcessInput(text string) (*InputProcessingResult, err
 	return result, nil
 }
 
-
 func (b *PositronicBrain) GenerateBounds() *MemoryBounds {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -202,13 +176,11 @@ func (b *PositronicBrain) GenerateBounds() *MemoryBounds {
 		PressureMod: b.Pressure,
 	}
 
-	
 	for _, c := range b.Context.GetFocus() {
 		bounds.Concepts[c] = 1.0
 		bounds.FocusBias = append(bounds.FocusBias, c)
 	}
 
-	
 	for c, w := range b.Context.GetActiveConcepts() {
 		if existing, ok := bounds.Concepts[c]; ok {
 			bounds.Concepts[c] = max(existing, w)
@@ -217,39 +189,35 @@ func (b *PositronicBrain) GenerateBounds() *MemoryBounds {
 		}
 	}
 
-	
 	topConcepts := b.Context.GetTopConcepts(5)
 	associated := b.Engrams.GetAssociatedConcepts(topConcepts, b.Pressure, 10)
 	for _, c := range associated {
 		if _, ok := bounds.Concepts[c]; !ok {
-			bounds.Concepts[c] = 0.3 
+			bounds.Concepts[c] = 0.3
 		}
 	}
 
-	
 	for _, c := range topConcepts {
 		pathways := b.Pathways.GetOutgoingPathways(c)
 		for _, p := range pathways {
 			if _, ok := bounds.Concepts[p.ToWord]; !ok {
-				bounds.Concepts[p.ToWord] = p.Strength * 0.5 
+				bounds.Concepts[p.ToWord] = p.Strength * 0.5
 			}
 		}
 	}
 
-	
-	if b.Pressure.Coherence > 0.7 {
+	if b.Pressure.PauliX > 0.7 {
 		for c, w := range bounds.Concepts {
 			if w < 0.5 {
-				bounds.Concepts[c] = w * (1 - (b.Pressure.Coherence - 0.7))
+				bounds.Concepts[c] = w * (1 - (b.Pressure.PauliX - 0.7))
 			}
 		}
 	}
 
-	
-	if b.Pressure.Tension > 0.7 {
+	if b.Pressure.PauliZ > 0.7 {
 		for c, w := range bounds.Concepts {
 			if w < 0.5 {
-				bounds.Concepts[c] = w * (1 + (b.Pressure.Tension - 0.7))
+				bounds.Concepts[c] = w * (1 + (b.Pressure.PauliZ - 0.7))
 			}
 		}
 	}
@@ -257,18 +225,14 @@ func (b *PositronicBrain) GenerateBounds() *MemoryBounds {
 	return bounds
 }
 
-
 func (b *PositronicBrain) Learn(response string, outputConcepts []string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	
 	b.Context.AddTurn("assistant", response, outputConcepts, b.Pressure)
 
-	
 	b.Pathways.StrengthenRoute(outputConcepts)
 
-	
 	lastInput, inputConcepts, ok := b.Context.GetLastUserMessage()
 	if ok && lastInput != "" {
 		for _, ic := range inputConcepts {
@@ -280,7 +244,6 @@ func (b *PositronicBrain) Learn(response string, outputConcepts []string) {
 		}
 	}
 
-	
 	allConcepts := make([]string, 0, len(inputConcepts)+len(outputConcepts))
 	seen := make(map[string]bool)
 	for _, c := range inputConcepts {
@@ -301,25 +264,22 @@ func (b *PositronicBrain) Learn(response string, outputConcepts []string) {
 	}
 }
 
-
 func (b *PositronicBrain) extractConcepts(text string) []string {
 	if b.conceptExtractor != nil {
 		return b.conceptExtractor(text)
 	}
 
-	
 	words := strings.Fields(strings.ToLower(text))
 	concepts := make([]string, 0)
 	for _, w := range words {
-		
+
 		w = strings.Trim(w, ".,!?;:\"'()[]{}")
-		if len(w) > 3 { 
+		if len(w) > 3 {
 			concepts = append(concepts, w)
 		}
 	}
 	return concepts
 }
-
 
 func (b *PositronicBrain) Decay() DecayResult {
 	pathwaysPruned := b.Pathways.Decay()
@@ -330,7 +290,6 @@ func (b *PositronicBrain) Decay() DecayResult {
 		EngramsPruned:  engramsPruned,
 	}
 }
-
 
 func (b *PositronicBrain) Stats() BrainStats {
 	return BrainStats{
@@ -344,11 +303,9 @@ func (b *PositronicBrain) Stats() BrainStats {
 	}
 }
 
-
 func (b *PositronicBrain) ClearContext() {
 	b.Context.Clear()
 }
-
 
 func max(a, b float64) float64 {
 	if a > b {
@@ -356,7 +313,6 @@ func max(a, b float64) float64 {
 	}
 	return b
 }
-
 
 type InputProcessingResult struct {
 	OriginalText       string                 `json:"original_text"`
@@ -367,13 +323,11 @@ type InputProcessingResult struct {
 	Timestamp          time.Time              `json:"timestamp"`
 }
 
-
 type MemoryBounds struct {
-	Concepts    map[string]float64 `json:"concepts"`     
-	FocusBias   []string           `json:"focus_bias"`   
-	PressureMod PressureState      `json:"pressure_mod"` 
+	Concepts    map[string]float64 `json:"concepts"`
+	FocusBias   []string           `json:"focus_bias"`
+	PressureMod PressureState      `json:"pressure_mod"`
 }
-
 
 func (mb *MemoryBounds) GetConceptList() []string {
 	concepts := make([]string, 0, len(mb.Concepts))
@@ -382,7 +336,6 @@ func (mb *MemoryBounds) GetConceptList() []string {
 	}
 	return concepts
 }
-
 
 func (mb *MemoryBounds) GetWeightedConcepts(threshold float64) map[string]float64 {
 	result := make(map[string]float64)
@@ -394,12 +347,10 @@ func (mb *MemoryBounds) GetWeightedConcepts(threshold float64) map[string]float6
 	return result
 }
 
-
 type DecayResult struct {
 	PathwaysPruned int `json:"pathways_pruned"`
 	EngramsPruned  int `json:"engrams_pruned"`
 }
-
 
 type BrainStats struct {
 	ForkID        string             `json:"fork_id"`

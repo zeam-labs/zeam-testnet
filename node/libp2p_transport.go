@@ -1,5 +1,3 @@
-
-
 package node
 
 import (
@@ -23,35 +21,29 @@ import (
 )
 
 const (
-	
+
 	ProxyProtocolID = "/zeam/tcp-proxy/1.0.0"
 )
-
 
 type LibP2PTransport struct {
 	host       host.Host
 	dht        *dht.IpfsDHT
 	privateKey *ecdsa.PrivateKey
 
-	
 	relayAddrs   []ma.Multiaddr
 	relayAddrsMu sync.RWMutex
 
-	
 	proxies   map[string]*proxyConn
 	proxiesMu sync.RWMutex
 
-	
 	ctx    context.Context
 	cancel context.CancelFunc
 }
-
 
 type proxyConn struct {
 	stream network.Stream
 	conn   net.Conn
 }
-
 
 var ipfsBootstrapNodes = []string{
 	"/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
@@ -61,11 +53,9 @@ var ipfsBootstrapNodes = []string{
 	"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
 }
 
-
 func NewLibP2PTransport(privateKey *ecdsa.PrivateKey) (*LibP2PTransport, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	
 	privKeyBytes := crypto.FromECDSA(privateKey)
 	libp2pPrivKey, err := libp2pcrypto.UnmarshalSecp256k1PrivateKey(privKeyBytes)
 	if err != nil {
@@ -73,18 +63,14 @@ func NewLibP2PTransport(privateKey *ecdsa.PrivateKey) (*LibP2PTransport, error) 
 		return nil, fmt.Errorf("failed to convert key: %w", err)
 	}
 
-	
 	h, err := libp2p.New(
 		libp2p.Identity(libp2pPrivKey),
 		libp2p.ListenAddrStrings(
 			"/ip4/0.0.0.0/tcp/0",
 			"/ip6/::/tcp/0",
 		),
-		
 		libp2p.EnableRelay(),
-		
 		libp2p.EnableHolePunching(),
-		
 		libp2p.EnableNATService(),
 	)
 	if err != nil {
@@ -92,8 +78,7 @@ func NewLibP2PTransport(privateKey *ecdsa.PrivateKey) (*LibP2PTransport, error) 
 		return nil, fmt.Errorf("failed to create libp2p host: %w", err)
 	}
 
-	
-	kadDHT, err := dht.New(ctx, h, dht.Mode(dht.ModeClient))
+	kadDHT, err := dht.New(ctx, h, dht.Mode(dht.ModeAutoServer))
 	if err != nil {
 		h.Close()
 		cancel()
@@ -112,21 +97,17 @@ func NewLibP2PTransport(privateKey *ecdsa.PrivateKey) (*LibP2PTransport, error) 
 	return t, nil
 }
 
-
 func (t *LibP2PTransport) Start() error {
 	fmt.Printf("[LibP2P] Starting with peer ID: %s\n", t.host.ID().String()[:16])
 
-	
 	if err := t.bootstrap(); err != nil {
 		return fmt.Errorf("failed to bootstrap: %w", err)
 	}
 
-	
 	if err := t.dht.Bootstrap(t.ctx); err != nil {
 		return fmt.Errorf("failed to bootstrap DHT: %w", err)
 	}
 
-	
 	go t.discoverRelays()
 
 	fmt.Printf("[LibP2P] Connected to IPFS network\n")
@@ -134,7 +115,6 @@ func (t *LibP2PTransport) Start() error {
 
 	return nil
 }
-
 
 func (t *LibP2PTransport) bootstrap() error {
 	var wg sync.WaitGroup
@@ -177,25 +157,21 @@ func (t *LibP2PTransport) bootstrap() error {
 	return nil
 }
 
-
 func (t *LibP2PTransport) discoverRelays() {
-	
+
 	time.Sleep(5 * time.Second)
 
-	
 	for _, p := range t.host.Network().Peers() {
-		
+
 		go func(peerID peer.ID) {
 			ctx, cancel := context.WithTimeout(t.ctx, 30*time.Second)
 			defer cancel()
 
-			
 			reservation, err := client.Reserve(ctx, t.host, peer.AddrInfo{ID: peerID})
 			if err != nil {
-				return 
+				return
 			}
 
-			
 			t.relayAddrsMu.Lock()
 			for _, addr := range reservation.Addrs {
 				relayAddr := addr.Encapsulate(ma.StringCast("/p2p/" + t.host.ID().String()))
@@ -207,22 +183,18 @@ func (t *LibP2PTransport) discoverRelays() {
 	}
 }
 
-
 func (t *LibP2PTransport) DialTCP(address string) (net.Conn, error) {
-	
-	
+
 	host, port, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, fmt.Errorf("invalid address: %w", err)
 	}
 
-	
 	targetMA, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%s", host, port))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create multiaddr: %w", err)
 	}
 
-	
 	dialer := &net.Dialer{
 		Timeout: 10 * time.Second,
 	}
@@ -235,7 +207,6 @@ func (t *LibP2PTransport) DialTCP(address string) (net.Conn, error) {
 	return conn, nil
 }
 
-
 func (t *LibP2PTransport) GetRelayAddrs() []string {
 	t.relayAddrsMu.RLock()
 	defer t.relayAddrsMu.RUnlock()
@@ -247,24 +218,30 @@ func (t *LibP2PTransport) GetRelayAddrs() []string {
 	return addrs
 }
 
-
 func (t *LibP2PTransport) PeerID() string {
 	return t.host.ID().String()
 }
 
+func (t *LibP2PTransport) Host() host.Host {
+	return t.host
+}
+
+func (t *LibP2PTransport) DHT() *dht.IpfsDHT {
+	return t.dht
+}
 
 func (t *LibP2PTransport) ConnectedPeers() int {
 	return len(t.host.Network().Peers())
 }
 
-
 func (t *LibP2PTransport) Stop() {
 	t.cancel()
-	t.dht.Close()
+	if t.dht != nil {
+		t.dht.Close()
+	}
 	t.host.Close()
 	fmt.Printf("[LibP2P] Stopped\n")
 }
-
 
 var _ io.ReadWriteCloser = (*proxyConn)(nil)
 
