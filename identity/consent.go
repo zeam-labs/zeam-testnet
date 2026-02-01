@@ -1,5 +1,3 @@
-
-
 package identity
 
 import (
@@ -14,88 +12,66 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-
 type ConsentType string
 
 const (
-	
+
 	ConsentRead ConsentType = "read"
-	
+
 	ConsentWrite ConsentType = "write"
-	
+
 	ConsentExport ConsentType = "export"
-	
+
 	ConsentDelegate ConsentType = "delegate"
-	
+
 	ConsentDelete ConsentType = "delete"
 )
 
-
 type Consent struct {
-	
+
 	ID [32]byte `json:"id"`
 
-	
 	Type ConsentType `json:"type"`
 
-	
 	Grantor common.Address `json:"grantor"`
 
-	
 	Grantee common.Address `json:"grantee"`
 
-	
 	StreamID [32]byte `json:"stream_id,omitempty"`
 
-	
 	SourceLayer LayerID `json:"source_layer,omitempty"`
 
-	
 	TargetLayer LayerID `json:"target_layer,omitempty"`
 
-	
 	Created int64 `json:"created"`
 
-	
 	Expiry int64 `json:"expiry,omitempty"`
 
-	
 	MaxUses int `json:"max_uses,omitempty"`
 
-	
 	UsesRemaining int `json:"uses_remaining,omitempty"`
 
-	
 	Conditions *ConsentConditions `json:"conditions,omitempty"`
 
-	
 	Revoked bool `json:"revoked"`
 
-	
 	RevokedAt int64 `json:"revoked_at,omitempty"`
 
-	
 	Signature []byte `json:"signature"`
 }
 
-
 type ConsentConditions struct {
-	
+
 	RequireReason bool `json:"require_reason,omitempty"`
 
-	
 	NotifyOnUse bool `json:"notify_on_use,omitempty"`
 
-	
 	ApprovalRequired bool `json:"approval_required,omitempty"`
 
-	
 	AllowedPurposes []string `json:"allowed_purposes,omitempty"`
 
-	
 	GeoRestriction []string `json:"geo_restriction,omitempty"`
 }
-
 
 func (c *Consent) GenerateID() {
 	data, _ := json.Marshal(struct {
@@ -108,7 +84,6 @@ func (c *Consent) GenerateID() {
 
 	c.ID = crypto.Keccak256Hash(data)
 }
-
 
 func (c *Consent) Sign(privateKey *ecdsa.PrivateKey) error {
 	addr := crypto.PubkeyToAddress(privateKey.PublicKey)
@@ -132,7 +107,6 @@ func (c *Consent) Sign(privateKey *ecdsa.PrivateKey) error {
 	return nil
 }
 
-
 func (c *Consent) Verify() bool {
 	if len(c.Signature) == 0 {
 		return false
@@ -155,7 +129,6 @@ func (c *Consent) Verify() bool {
 	return crypto.PubkeyToAddress(*pubKey) == c.Grantor
 }
 
-
 func (c *Consent) IsValid() bool {
 	if c.Revoked {
 		return false
@@ -173,7 +146,6 @@ func (c *Consent) IsValid() bool {
 	return c.Verify()
 }
 
-
 func (c *Consent) Use() error {
 	if !c.IsValid() {
 		return fmt.Errorf("consent is not valid")
@@ -186,33 +158,25 @@ func (c *Consent) Use() error {
 	return nil
 }
 
-
 func (c *Consent) Revoke() {
 	c.Revoked = true
 	c.RevokedAt = time.Now().Unix()
 }
 
-
 type ConsentProof struct {
-	
+
 	ConsentID [32]byte `json:"consent_id"`
 
-	
 	Operation ConsentType `json:"operation"`
 
-	
 	Target [32]byte `json:"target"`
 
-	
 	Timestamp int64 `json:"timestamp"`
 
-	
 	Reason string `json:"reason,omitempty"`
 
-	
 	Signature []byte `json:"signature"`
 }
-
 
 func (cp *ConsentProof) Sign(privateKey *ecdsa.PrivateKey) error {
 	cp.Signature = nil
@@ -230,7 +194,6 @@ func (cp *ConsentProof) Sign(privateKey *ecdsa.PrivateKey) error {
 	cp.Signature = sig
 	return nil
 }
-
 
 func (cp *ConsentProof) Verify() (common.Address, bool) {
 	if len(cp.Signature) == 0 {
@@ -254,23 +217,17 @@ func (cp *ConsentProof) Verify() (common.Address, bool) {
 	return crypto.PubkeyToAddress(*pubKey), true
 }
 
-
 type ConsentManager struct {
 	mu sync.RWMutex
 
-	
 	Owner common.Address
 
-	
 	Consents map[[32]byte]*Consent
 
-	
 	ByGrantee map[common.Address][][32]byte
 
-	
 	UsageLog []ConsentUsageEntry
 }
-
 
 type ConsentUsageEntry struct {
 	ConsentID [32]byte       `json:"consent_id"`
@@ -281,7 +238,6 @@ type ConsentUsageEntry struct {
 	Reason    string         `json:"reason,omitempty"`
 }
 
-
 func NewConsentManager(owner common.Address) *ConsentManager {
 	return &ConsentManager{
 		Owner:     owner,
@@ -291,38 +247,31 @@ func NewConsentManager(owner common.Address) *ConsentManager {
 	}
 }
 
-
 func (cm *ConsentManager) Grant(consent *Consent, privateKey *ecdsa.PrivateKey) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	
 	if consent.Grantor != cm.Owner {
 		return fmt.Errorf("grantor must be consent manager owner")
 	}
 
-	
 	if consent.ID == [32]byte{} {
 		consent.GenerateID()
 	}
 
-	
 	if consent.MaxUses > 0 {
 		consent.UsesRemaining = consent.MaxUses
 	}
 
-	
 	if err := consent.Sign(privateKey); err != nil {
 		return err
 	}
 
-	
 	cm.Consents[consent.ID] = consent
 	cm.ByGrantee[consent.Grantee] = append(cm.ByGrantee[consent.Grantee], consent.ID)
 
 	return nil
 }
-
 
 func (cm *ConsentManager) Revoke(consentID [32]byte) error {
 	cm.mu.Lock()
@@ -337,51 +286,42 @@ func (cm *ConsentManager) Revoke(consentID [32]byte) error {
 	return nil
 }
 
-
 func (cm *ConsentManager) ValidateAndUse(proof *ConsentProof) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	
 	consent, exists := cm.Consents[proof.ConsentID]
 	if !exists {
 		return fmt.Errorf("consent not found")
 	}
 
-	
 	grantee, valid := proof.Verify()
 	if !valid {
 		return fmt.Errorf("invalid proof signature")
 	}
 
-	
 	if grantee != consent.Grantee {
 		return fmt.Errorf("proof signer is not the grantee")
 	}
 
-	
 	if !consent.IsValid() {
 		return fmt.Errorf("consent is not valid")
 	}
 
-	
 	if proof.Operation != consent.Type {
 		return fmt.Errorf("operation type mismatch")
 	}
 
-	
 	if consent.Conditions != nil {
 		if consent.Conditions.RequireReason && proof.Reason == "" {
 			return fmt.Errorf("reason required but not provided")
 		}
 	}
 
-	
 	if err := consent.Use(); err != nil {
 		return err
 	}
 
-	
 	cm.UsageLog = append(cm.UsageLog, ConsentUsageEntry{
 		ConsentID: proof.ConsentID,
 		Grantee:   grantee,
@@ -393,7 +333,6 @@ func (cm *ConsentManager) ValidateAndUse(proof *ConsentProof) error {
 
 	return nil
 }
-
 
 func (cm *ConsentManager) GetConsentsFor(grantee common.Address) []*Consent {
 	cm.mu.RLock()
@@ -407,7 +346,6 @@ func (cm *ConsentManager) GetConsentsFor(grantee common.Address) []*Consent {
 	}
 	return result
 }
-
 
 func (cm *ConsentManager) HasConsent(grantee common.Address, operation ConsentType, streamID [32]byte) bool {
 	cm.mu.RLock()
@@ -423,7 +361,6 @@ func (cm *ConsentManager) HasConsent(grantee common.Address, operation ConsentTy
 			continue
 		}
 
-		
 		if consent.StreamID != [32]byte{} && consent.StreamID != streamID {
 			continue
 		}
@@ -433,14 +370,12 @@ func (cm *ConsentManager) HasConsent(grantee common.Address, operation ConsentTy
 	return false
 }
 
-
 func (cm *ConsentManager) ExportConsents() ([]byte, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 
 	return json.Marshal(cm.Consents)
 }
-
 
 func (cm *ConsentManager) GetUsageLog() []ConsentUsageEntry {
 	cm.mu.RLock()
@@ -451,11 +386,9 @@ func (cm *ConsentManager) GetUsageLog() []ConsentUsageEntry {
 	return result
 }
 
-
 func ConsentIDToHex(id [32]byte) string {
 	return hex.EncodeToString(id[:])
 }
-
 
 func HexToConsentID(s string) ([32]byte, error) {
 	var id [32]byte

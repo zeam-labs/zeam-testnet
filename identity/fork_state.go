@@ -1,5 +1,3 @@
-
-
 package identity
 
 import (
@@ -12,43 +10,35 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-
 type ForkState struct {
 	mu sync.RWMutex
 
-	
 	ForkID          [32]byte       `json:"fork_id"`
 	ChainSalt       []byte         `json:"chain_salt"`
 	CreatedAt       int64          `json:"created_at"`
 	GenesisBlock    uint64         `json:"genesis_block"`
-	GenesisChain    string         `json:"genesis_chain"` 
+	GenesisChain    string         `json:"genesis_chain"`
 	GenesisTxHash   common.Hash    `json:"genesis_tx_hash"`
 
-	
 	CurrentAddress  common.Address `json:"current_address"`
 	RecoveryConfig  RecoveryConfig `json:"recovery_config"`
 	LastCheckpoint  *Checkpoint    `json:"last_checkpoint,omitempty"`
 
-	
 	LastSyncBlock   uint64         `json:"-"`
 	PendingRecovery *PendingRecoveryState `json:"-"`
 }
 
-
 type RecoveryConfig struct {
-	
+
 	Guardians        []common.Address `json:"guardians,omitempty"`
 	GuardianThreshold int             `json:"guardian_threshold,omitempty"`
 
-	
 	TimelockEnabled  bool  `json:"timelock_enabled"`
-	TimelockDuration int64 `json:"timelock_duration"` 
+	TimelockDuration int64 `json:"timelock_duration"`
 
-	
 	UpdatedAt        int64          `json:"updated_at"`
 	UpdatedBy        common.Address `json:"updated_by"`
 }
-
 
 type Checkpoint struct {
 	Epoch           uint64      `json:"epoch"`
@@ -59,22 +49,20 @@ type Checkpoint struct {
 	Signature       []byte      `json:"signature"`
 }
 
-
 type PendingRecoveryState struct {
 	NewAddress      common.Address   `json:"new_address"`
 	NewChainSalt    []byte           `json:"new_chain_salt"`
 	InitiatedAt     int64            `json:"initiated_at"`
 	InitiatedBy     common.Address   `json:"initiated_by"`
-	Method          string           `json:"method"` 
+	Method          string           `json:"method"`
 	Approvals       []RecoveryApproval `json:"approvals,omitempty"`
-	CanCompleteAt   int64            `json:"can_complete_at"` 
+	CanCompleteAt   int64            `json:"can_complete_at"`
 	TxHash          common.Hash      `json:"tx_hash"`
 }
 
-
 type ForkGenesis struct {
 	Version         int            `json:"version"`
-	Type            string         `json:"type"` 
+	Type            string         `json:"type"`
 	ForkID          [32]byte       `json:"fork_id"`
 	ChainSalt       []byte         `json:"chain_salt"`
 	InitialAddress  common.Address `json:"initial_address"`
@@ -82,7 +70,6 @@ type ForkGenesis struct {
 	RecoveryConfig  RecoveryConfig `json:"recovery_config"`
 	Signature       []byte         `json:"signature"`
 }
-
 
 func NewForkGenesis(identity *StatelessIdentity, config RecoveryConfig) (*ForkGenesis, error) {
 	if identity == nil || !identity.IsValid() {
@@ -103,7 +90,6 @@ func NewForkGenesis(identity *StatelessIdentity, config RecoveryConfig) (*ForkGe
 		RecoveryConfig: config,
 	}
 
-	
 	data, err := json.Marshal(genesis)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal genesis: %w", err)
@@ -118,7 +104,6 @@ func NewForkGenesis(identity *StatelessIdentity, config RecoveryConfig) (*ForkGe
 	genesis.Signature = sig
 	return genesis, nil
 }
-
 
 func (fg *ForkGenesis) Verify() (common.Address, bool) {
 	sig := fg.Signature
@@ -140,11 +125,9 @@ func (fg *ForkGenesis) Verify() (common.Address, bool) {
 	return signer, signer == fg.InitialAddress
 }
 
-
 func (fg *ForkGenesis) ToBytes() ([]byte, error) {
 	return json.Marshal(fg)
 }
-
 
 func ForkGenesisFromBytes(data []byte) (*ForkGenesis, error) {
 	var fg ForkGenesis
@@ -153,7 +136,6 @@ func ForkGenesisFromBytes(data []byte) (*ForkGenesis, error) {
 	}
 	return &fg, nil
 }
-
 
 func ForkStateFromGenesis(genesis *ForkGenesis, blockNumber uint64, txHash common.Hash, chainID string) (*ForkState, error) {
 	signer, valid := genesis.Verify()
@@ -177,7 +159,6 @@ func ForkStateFromGenesis(genesis *ForkGenesis, blockNumber uint64, txHash commo
 	}, nil
 }
 
-
 type StateTransition struct {
 	Version   int            `json:"version"`
 	Type      TransitionType `json:"type"`
@@ -188,7 +169,6 @@ type StateTransition struct {
 	Data      json.RawMessage `json:"data"`
 	Signature []byte         `json:"signature"`
 }
-
 
 type TransitionType string
 
@@ -203,7 +183,6 @@ const (
 	TransitionConsentGrant     TransitionType = "consent_grant"
 	TransitionConsentRevoke    TransitionType = "consent_revoke"
 )
-
 
 func NewStateTransition(
 	identity *StatelessIdentity,
@@ -230,7 +209,6 @@ func NewStateTransition(
 		Data:      dataBytes,
 	}
 
-	
 	sigData, err := json.Marshal(tx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal for signing: %w", err)
@@ -245,7 +223,6 @@ func NewStateTransition(
 	tx.Signature = sig
 	return tx, nil
 }
-
 
 func (st *StateTransition) Verify() (common.Address, bool) {
 	sig := st.Signature
@@ -267,11 +244,9 @@ func (st *StateTransition) Verify() (common.Address, bool) {
 	return signer, signer == st.From
 }
 
-
 func (st *StateTransition) ToBytes() ([]byte, error) {
 	return json.Marshal(st)
 }
-
 
 func StateTransitionFromBytes(data []byte) (*StateTransition, error) {
 	var st StateTransition
@@ -281,28 +256,23 @@ func StateTransitionFromBytes(data []byte) (*StateTransition, error) {
 	return &st, nil
 }
 
-
 func (fs *ForkState) ApplyTransition(tx *StateTransition) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	
 	signer, valid := tx.Verify()
 	if !valid {
 		return fmt.Errorf("invalid transition signature")
 	}
 
-	
 	if tx.ForkID != fs.ForkID {
 		return fmt.Errorf("fork ID mismatch")
 	}
 
-	
 	if !fs.isAuthorized(signer, tx.Type) {
 		return fmt.Errorf("signer %s not authorized for %s", signer.Hex(), tx.Type)
 	}
 
-	
 	switch tx.Type {
 	case TransitionCheckpoint:
 		return fs.applyCheckpoint(tx.Data)
@@ -323,18 +293,17 @@ func (fs *ForkState) ApplyTransition(tx *StateTransition) error {
 		return fs.applyRecoveryCancel(signer)
 
 	default:
-		
+
 		return nil
 	}
 }
 
 func (fs *ForkState) isAuthorized(signer common.Address, txType TransitionType) bool {
-	
+
 	if signer == fs.CurrentAddress {
 		return true
 	}
 
-	
 	if txType == TransitionRecoveryApprove {
 		for _, g := range fs.RecoveryConfig.Guardians {
 			if g == signer {
@@ -343,7 +312,6 @@ func (fs *ForkState) isAuthorized(signer common.Address, txType TransitionType) 
 		}
 	}
 
-	
 	if txType == TransitionRecoveryInitiate {
 		return fs.RecoveryConfig.TimelockEnabled
 	}
@@ -397,7 +365,6 @@ func (fs *ForkState) applyRecoveryApprove(data json.RawMessage, signer common.Ad
 		return err
 	}
 
-	
 	isGuardian := false
 	for _, g := range fs.RecoveryConfig.Guardians {
 		if g == signer {
@@ -409,7 +376,6 @@ func (fs *ForkState) applyRecoveryApprove(data json.RawMessage, signer common.Ad
 		return fmt.Errorf("signer is not a guardian")
 	}
 
-	
 	for _, a := range fs.PendingRecovery.Approvals {
 		if a.Approver == signer {
 			return fmt.Errorf("already approved")
@@ -420,10 +386,9 @@ func (fs *ForkState) applyRecoveryApprove(data json.RawMessage, signer common.Ad
 	approval.ApprovedAt = time.Now().Unix()
 	fs.PendingRecovery.Approvals = append(fs.PendingRecovery.Approvals, approval)
 
-	
 	if len(fs.PendingRecovery.Approvals) >= fs.RecoveryConfig.GuardianThreshold {
 		fs.PendingRecovery.Method = "social"
-		fs.PendingRecovery.CanCompleteAt = time.Now().Unix() 
+		fs.PendingRecovery.CanCompleteAt = time.Now().Unix()
 	}
 
 	return nil
@@ -439,12 +404,10 @@ func (fs *ForkState) applyRecoveryComplete(data json.RawMessage, signer common.A
 		return fmt.Errorf("recovery not yet completable")
 	}
 
-	
 	if signer != fs.PendingRecovery.NewAddress {
 		return fmt.Errorf("signer must be the new address")
 	}
 
-	
 	fs.CurrentAddress = fs.PendingRecovery.NewAddress
 	if len(fs.PendingRecovery.NewChainSalt) > 0 {
 		fs.ChainSalt = fs.PendingRecovery.NewChainSalt
@@ -459,7 +422,6 @@ func (fs *ForkState) applyRecoveryCancel(signer common.Address) error {
 		return fmt.Errorf("no pending recovery")
 	}
 
-	
 	if signer != fs.CurrentAddress {
 		return fmt.Errorf("only current owner can cancel recovery")
 	}
@@ -467,7 +429,6 @@ func (fs *ForkState) applyRecoveryCancel(signer common.Address) error {
 	fs.PendingRecovery = nil
 	return nil
 }
-
 
 func (fs *ForkState) CanRecover(method string) (bool, string) {
 	fs.mu.RLock()
@@ -497,13 +458,11 @@ func (fs *ForkState) CanRecover(method string) (bool, string) {
 	}
 }
 
-
 func (fs *ForkState) HasPendingRecovery() bool {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 	return fs.PendingRecovery != nil
 }
-
 
 func (fs *ForkState) GetPendingRecovery() *PendingRecoveryState {
 	fs.mu.RLock()
@@ -511,11 +470,10 @@ func (fs *ForkState) GetPendingRecovery() *PendingRecoveryState {
 	if fs.PendingRecovery == nil {
 		return nil
 	}
-	
+
 	copy := *fs.PendingRecovery
 	return &copy
 }
-
 
 func (fs *ForkState) IsOwner(addr common.Address) bool {
 	fs.mu.RLock()
@@ -523,13 +481,11 @@ func (fs *ForkState) IsOwner(addr common.Address) bool {
 	return addr == fs.CurrentAddress
 }
 
-
 func (fs *ForkState) GetCurrentAddress() common.Address {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 	return fs.CurrentAddress
 }
-
 
 func (fs *ForkState) GetChainSalt() []byte {
 	fs.mu.RLock()

@@ -1,5 +1,3 @@
-
-
 package grammar
 
 import (
@@ -11,42 +9,36 @@ import (
 	"sync"
 )
 
-
 type GrammarHash struct {
-	
+
 	OpType GrammarOp
 
-	
 	InputText    string
 	InputConcept string
 	InputPOS     PartOfSpeech
 	SlotName     string
 	PatternName  string
 
-	
 	ContextHash []byte
 	Pressure    PressureContext
 }
 
-
 type GrammarOp uint8
 
 const (
-	OpDetectSentenceType GrammarOp = iota 
-	OpDetectIntent                        
-	OpIdentifyPOS                         
-	OpSelectPattern                       
-	OpFillSlot                            
-	OpSelectModifier                      
-	OpAssembleSentence                    
+	OpDetectSentenceType GrammarOp = iota
+	OpDetectIntent
+	OpIdentifyPOS
+	OpSelectPattern
+	OpFillSlot
+	OpSelectModifier
+	OpAssembleSentence
 )
 
-
 type GrammarResult struct {
-	
+
 	Hash []byte
 
-	
 	SentenceType SentenceType
 	Intent       string
 	POS          PartOfSpeech
@@ -55,12 +47,10 @@ type GrammarResult struct {
 	Modifiers    []string
 }
 
-
 type DistributedGrammar struct {
-	
+
 	Dispatcher func(payload []byte) ([][]byte, error)
 
-	
 	POSLookup     func(word string) PartOfSpeech
 	WordsByPOS    func(pos string, limit int) []string
 	SynsetLookup  func(word string) []string
@@ -69,30 +59,25 @@ type DistributedGrammar struct {
 	GetDefinition func(word string) string
 }
 
-
 func NewDistributedGrammar(dispatcher func(payload []byte) ([][]byte, error)) *DistributedGrammar {
 	return &DistributedGrammar{
 		Dispatcher: dispatcher,
 	}
 }
 
-
 func EncodeGrammarPayload(gh *GrammarHash) []byte {
-	
+
 	payload := make([]byte, 0, 128)
 
-	
 	payload = append(payload, byte(gh.OpType))
 
-	
 	pressureBytes := make([]byte, 32)
-	binary.BigEndian.PutUint64(pressureBytes[0:8], uint64(gh.Pressure.Magnitude*1e9))
-	binary.BigEndian.PutUint64(pressureBytes[8:16], uint64(gh.Pressure.Coherence*1e9))
-	binary.BigEndian.PutUint64(pressureBytes[16:24], uint64(gh.Pressure.Tension*1e9))
-	binary.BigEndian.PutUint64(pressureBytes[24:32], uint64(gh.Pressure.Density*1e9))
+	binary.BigEndian.PutUint64(pressureBytes[0:8], uint64(gh.Pressure.Hadamard*1e9))
+	binary.BigEndian.PutUint64(pressureBytes[8:16], uint64(gh.Pressure.PauliX*1e9))
+	binary.BigEndian.PutUint64(pressureBytes[16:24], uint64(gh.Pressure.PauliZ*1e9))
+	binary.BigEndian.PutUint64(pressureBytes[24:32], uint64(gh.Pressure.Phase*1e9))
 	payload = append(payload, pressureBytes...)
 
-	
 	if len(gh.ContextHash) >= 32 {
 		payload = append(payload, gh.ContextHash[:32]...)
 	} else {
@@ -101,46 +86,44 @@ func EncodeGrammarPayload(gh *GrammarHash) []byte {
 		payload = append(payload, padding...)
 	}
 
-	
 	switch gh.OpType {
 	case OpDetectSentenceType, OpDetectIntent:
-		
+
 		textHash := sha256.Sum256([]byte(gh.InputText))
 		payload = append(payload, textHash[:]...)
 
 	case OpIdentifyPOS:
-		
+
 		wordHash := sha256.Sum256([]byte(gh.InputConcept))
 		payload = append(payload, wordHash[:]...)
 
 	case OpSelectPattern:
-		
+
 		intentHash := sha256.Sum256([]byte(gh.InputText))
 		payload = append(payload, intentHash[:]...)
 
 	case OpFillSlot:
-		
+
 		combined := gh.SlotName + "|" + gh.InputConcept
 		combinedHash := sha256.Sum256([]byte(combined))
 		payload = append(payload, combinedHash[:]...)
-		
+
 		payload = append(payload, byte(posToIndex(gh.InputPOS)))
 
 	case OpSelectModifier:
-		
+
 		combined := gh.InputConcept + "|" + gh.SlotName
 		combinedHash := sha256.Sum256([]byte(combined))
 		payload = append(payload, combinedHash[:]...)
 
 	case OpAssembleSentence:
-		
+
 		patternHash := sha256.Sum256([]byte(gh.PatternName))
 		payload = append(payload, patternHash[:]...)
 	}
 
 	return payload
 }
-
 
 func posToIndex(pos PartOfSpeech) int {
 	switch pos {
@@ -167,7 +150,6 @@ func posToIndex(pos PartOfSpeech) int {
 	}
 }
 
-
 func indexToPOS(idx int) PartOfSpeech {
 	switch idx % 9 {
 	case 0:
@@ -193,7 +175,6 @@ func indexToPOS(idx int) PartOfSpeech {
 	}
 }
 
-
 func detectSentenceTypeFromText(text string) SentenceType {
 	text = strings.TrimSpace(text)
 	lower := strings.ToLower(text)
@@ -205,7 +186,6 @@ func detectSentenceTypeFromText(text string) SentenceType {
 
 	firstWord := strings.Trim(fields[0], ",.!?")
 
-	
 	greetings := map[string]bool{
 		"hello": true, "hi": true, "hey": true, "greetings": true,
 		"howdy": true, "hiya": true, "yo": true, "welcome": true,
@@ -214,7 +194,6 @@ func detectSentenceTypeFromText(text string) SentenceType {
 		return TypeGreeting
 	}
 
-	
 	if strings.HasSuffix(text, "?") {
 		return TypeQuestion
 	}
@@ -222,7 +201,6 @@ func detectSentenceTypeFromText(text string) SentenceType {
 		return TypeExclamation
 	}
 
-	
 	questionWords := map[string]bool{
 		"what": true, "who": true, "where": true, "when": true,
 		"why": true, "how": true, "which": true, "whose": true,
@@ -231,7 +209,6 @@ func detectSentenceTypeFromText(text string) SentenceType {
 		return TypeQuestion
 	}
 
-	
 	auxVerbs := map[string]bool{
 		"is": true, "are": true, "was": true, "were": true,
 		"do": true, "does": true, "did": true, "can": true,
@@ -241,7 +218,6 @@ func detectSentenceTypeFromText(text string) SentenceType {
 		return TypeQuestion
 	}
 
-	
 	commandVerbs := map[string]bool{
 		"tell": true, "explain": true, "describe": true, "show": true,
 		"give": true, "list": true, "define": true, "help": true,
@@ -253,7 +229,6 @@ func detectSentenceTypeFromText(text string) SentenceType {
 	return TypeStatement
 }
 
-
 func detectIntentFromText(text string, sentType SentenceType) string {
 	lower := strings.ToLower(text)
 
@@ -261,7 +236,7 @@ func detectIntentFromText(text string, sentType SentenceType) string {
 	case TypeGreeting:
 		return "greeting"
 	case TypeQuestion:
-		
+
 		if strings.Contains(lower, "what is") || strings.Contains(lower, "what are") {
 			return "explanation"
 		}
@@ -282,7 +257,6 @@ func detectIntentFromText(text string, sentType SentenceType) string {
 	}
 }
 
-
 func (dg *DistributedGrammar) ParseDistributed(text string, pressure PressureContext) (*ParsedSentence, error) {
 	result := &ParsedSentence{
 		Original: text,
@@ -290,16 +264,12 @@ func (dg *DistributedGrammar) ParseDistributed(text string, pressure PressureCon
 		Concepts: make([]string, 0),
 	}
 
-	
 	result.Type = detectSentenceTypeFromText(text)
 
-	
 	result.Intent = detectIntentFromText(text, result.Type)
 
-	
 	tokens := tokenizeSimple(text)
 
-	
 	initialHash := sha256.Sum256([]byte(text))
 	contextHash := initialHash[:]
 	for i, token := range tokens {
@@ -319,31 +289,27 @@ func (dg *DistributedGrammar) ParseDistributed(text string, pressure PressureCon
 
 		word := &ParsedWord{
 			Word:     token,
-			Lemma:    token, 
+			Lemma:    token,
 			POS:      pos,
 			Position: i,
 		}
 		result.Words = append(result.Words, word)
 
-		
 		if len(posHashes) > 0 {
 			contextHash = posHashes[0]
 		}
 
-		
 		if isContentWordSimple(word) {
 			result.Concepts = append(result.Concepts, token)
 		}
 	}
 
-	
 	dg.identifyRolesFromPOS(result)
 
 	result.IsComplete = result.Subject != nil && result.Verb != nil
 
 	return result, nil
 }
-
 
 func (dg *DistributedGrammar) BuildResponseDistributed(
 	parsed *ParsedSentence,
@@ -354,7 +320,6 @@ func (dg *DistributedGrammar) BuildResponseDistributed(
 		return "", nil
 	}
 
-	
 	patternPayload := EncodeGrammarPayload(&GrammarHash{
 		OpType:    OpSelectPattern,
 		InputText: parsed.Intent,
@@ -369,7 +334,6 @@ func (dg *DistributedGrammar) BuildResponseDistributed(
 	pattern := dg.decodePattern(patternHashes, parsed.Intent)
 	sentence := NewSentence(pattern)
 
-	
 	contextHash := patternHashes[0]
 	usedWords := make(map[string]bool)
 	conceptIdx := 0
@@ -380,14 +344,12 @@ func (dg *DistributedGrammar) BuildResponseDistributed(
 			continue
 		}
 
-		
 		concept := ""
 		if conceptIdx < len(concepts) {
 			concept = concepts[conceptIdx]
 			conceptIdx++
 		}
 
-		
 		fillPayload := EncodeGrammarPayload(&GrammarHash{
 			OpType:       OpFillSlot,
 			SlotName:     slot.Name,
@@ -407,9 +369,8 @@ func (dg *DistributedGrammar) BuildResponseDistributed(
 			continue
 		}
 
-		
 		var modifiers []string
-		if slot.Modifiable && pressure.Density > 0.5 {
+		if slot.Modifiable && pressure.Phase > 0.5 {
 			modPayload := EncodeGrammarPayload(&GrammarHash{
 				OpType:       OpSelectModifier,
 				InputConcept: word,
@@ -439,13 +400,11 @@ func (dg *DistributedGrammar) BuildResponseDistributed(
 	return sentence.Build(), nil
 }
 
-
 func (dg *DistributedGrammar) decodeSentenceType(hashes [][]byte) SentenceType {
 	if len(hashes) == 0 {
 		return TypeStatement
 	}
 
-	
 	typeIdx := int(hashes[0][0]) % 5
 	switch typeIdx {
 	case 0:
@@ -463,13 +422,11 @@ func (dg *DistributedGrammar) decodeSentenceType(hashes [][]byte) SentenceType {
 	}
 }
 
-
 func (dg *DistributedGrammar) decodeIntent(hashes [][]byte, sentType SentenceType) string {
 	if len(hashes) == 0 {
 		return "statement"
 	}
 
-	
 	intents := map[SentenceType][]string{
 		TypeStatement:   {"statement", "description", "acknowledgment"},
 		TypeQuestion:    {"question", "explanation", "inquiry"},
@@ -487,9 +444,8 @@ func (dg *DistributedGrammar) decodeIntent(hashes [][]byte, sentType SentenceTyp
 	return options[idx]
 }
 
-
 func (dg *DistributedGrammar) decodePOS(hashes [][]byte, word string) PartOfSpeech {
-	
+
 	if dg.POSLookup != nil {
 		pos := dg.POSLookup(word)
 		if pos != "" {
@@ -501,14 +457,12 @@ func (dg *DistributedGrammar) decodePOS(hashes [][]byte, word string) PartOfSpee
 		return POS_Noun
 	}
 
-	
-	posIdx := int(hashes[0][0]) % 4 
+	posIdx := int(hashes[0][0]) % 4
 	return indexToPOS(posIdx)
 }
 
-
 func (dg *DistributedGrammar) decodePattern(hashes [][]byte, intent string) *SentencePattern {
-	
+
 	patterns := GetPatternsForIntent(intent)
 	if len(patterns) == 0 {
 		return PatternDeclarativeSVO
@@ -518,18 +472,15 @@ func (dg *DistributedGrammar) decodePattern(hashes [][]byte, intent string) *Sen
 		return patterns[0]
 	}
 
-	
 	idx := int(hashes[0][0]) % len(patterns)
 	return patterns[idx]
 }
-
 
 func (dg *DistributedGrammar) decodeWord(hashes [][]byte, targetPOS PartOfSpeech, concepts []string, used map[string]bool) string {
 	if len(hashes) == 0 {
 		return ""
 	}
 
-	
 	availableConcepts := make([]string, 0)
 	for _, c := range concepts {
 		if !used[c] {
@@ -553,7 +504,6 @@ func (dg *DistributedGrammar) decodeWord(hashes [][]byte, targetPOS PartOfSpeech
 		return availableConcepts[idx]
 	}
 
-	
 	if dg.SynsetLookup != nil && dg.SynsetByID != nil {
 		relatedWords := make([]string, 0)
 		for _, c := range concepts {
@@ -585,7 +535,6 @@ func (dg *DistributedGrammar) decodeWord(hashes [][]byte, targetPOS PartOfSpeech
 		}
 	}
 
-	
 	if dg.GetSynonyms != nil && dg.POSLookup != nil {
 		for _, c := range concepts {
 			if used[c] {
@@ -603,7 +552,6 @@ func (dg *DistributedGrammar) decodeWord(hashes [][]byte, targetPOS PartOfSpeech
 		}
 	}
 
-	
 	fallbacks := getFallbackWords(targetPOS)
 	if len(fallbacks) > 0 {
 		hashInt := new(big.Int).SetBytes(hashes[0]).Int64()
@@ -617,19 +565,16 @@ func (dg *DistributedGrammar) decodeWord(hashes [][]byte, targetPOS PartOfSpeech
 	return ""
 }
 
-
 func (dg *DistributedGrammar) decodeModifier(hashes [][]byte, targetPOS PartOfSpeech, concepts []string, used map[string]bool) string {
 	if len(hashes) == 0 {
 		return ""
 	}
 
-	
 	modPOS := POS_Adjective
 	if targetPOS == POS_Verb {
 		modPOS = POS_Adverb
 	}
 
-	
 	for _, c := range concepts {
 		if used[c] {
 			continue
@@ -642,7 +587,6 @@ func (dg *DistributedGrammar) decodeModifier(hashes [][]byte, targetPOS PartOfSp
 		}
 	}
 
-	
 	if dg.WordsByPOS != nil {
 		words := dg.WordsByPOS(string(modPOS), 20)
 		if len(words) > 0 {
@@ -654,9 +598,8 @@ func (dg *DistributedGrammar) decodeModifier(hashes [][]byte, targetPOS PartOfSp
 	return ""
 }
 
-
 func (dg *DistributedGrammar) identifyRolesFromPOS(ps *ParsedSentence) {
-	
+
 	verbIdx := -1
 	for i, w := range ps.Words {
 		if w.POS == POS_Verb {
@@ -667,7 +610,6 @@ func (dg *DistributedGrammar) identifyRolesFromPOS(ps *ParsedSentence) {
 		}
 	}
 
-	
 	for i, w := range ps.Words {
 		if verbIdx >= 0 && i >= verbIdx {
 			break
@@ -679,7 +621,6 @@ func (dg *DistributedGrammar) identifyRolesFromPOS(ps *ParsedSentence) {
 		}
 	}
 
-	
 	if verbIdx >= 0 {
 		for i := verbIdx + 1; i < len(ps.Words); i++ {
 			w := ps.Words[i]
@@ -692,9 +633,8 @@ func (dg *DistributedGrammar) identifyRolesFromPOS(ps *ParsedSentence) {
 	}
 }
 
-
 func tokenizeSimple(text string) []string {
-	
+
 	tokens := make([]string, 0)
 	current := ""
 
@@ -721,7 +661,6 @@ func tokenizeSimple(text string) []string {
 	return tokens
 }
 
-
 func isContentWordSimple(w *ParsedWord) bool {
 	if len(w.Lemma) < 3 {
 		return false
@@ -732,7 +671,6 @@ func isContentWordSimple(w *ParsedWord) bool {
 	}
 	return false
 }
-
 
 func getFallbackWords(pos PartOfSpeech) []string {
 	switch pos {
@@ -749,28 +687,24 @@ func getFallbackWords(pos PartOfSpeech) []string {
 	}
 }
 
-
 func (dg *DistributedGrammar) GenerateDistributed(
 	inputText string,
 	concepts []string,
 	pressure PressureContext,
 ) (string, error) {
-	
+
 	parsed, err := dg.ParseDistributed(inputText, pressure)
 	if err != nil {
 		return "", err
 	}
 
-	
 	fmt.Printf("[Grammar] Input: %q, Type: %v, Intent: %s\n", inputText, parsed.Type, parsed.Intent)
 
-	
 	if parsed.Intent == "greeting" {
 		fmt.Printf("[Grammar] Detected greeting, returning Hello.\n")
 		return "Hello.", nil
 	}
 
-	
 	allConcepts := make([]string, 0, len(parsed.Concepts)+len(concepts))
 	seen := make(map[string]bool)
 	for _, c := range parsed.Concepts {
@@ -786,58 +720,49 @@ func (dg *DistributedGrammar) GenerateDistributed(
 		}
 	}
 
-	
 	return dg.BuildResponseDistributed(parsed, allConcepts, pressure)
 }
 
-
 type GrammarPayloadV2 struct {
-	InputText    string          
-	Concepts     []string        
-	Pressure     PressureContext 
-	MaxSlots     int             
-	MaxModifiers int             
+	InputText    string
+	Concepts     []string
+	Pressure     PressureContext
+	MaxSlots     int
+	MaxModifiers int
 }
 
-
 func EncodeGrammarPayloadV2(gp *GrammarPayloadV2) []byte {
-	
+
 	payload := make([]byte, 0, 256)
 
-	
 	payload = append(payload, 0x02)
 
-	
 	numConcepts := len(gp.Concepts)
 	if numConcepts > 255 {
 		numConcepts = 255
 	}
 	payload = append(payload, byte(numConcepts>>8), byte(numConcepts))
 
-	
 	pressureBytes := make([]byte, 32)
-	binary.BigEndian.PutUint64(pressureBytes[0:8], uint64(gp.Pressure.Magnitude*1e9))
-	binary.BigEndian.PutUint64(pressureBytes[8:16], uint64(gp.Pressure.Coherence*1e9))
-	binary.BigEndian.PutUint64(pressureBytes[16:24], uint64(gp.Pressure.Tension*1e9))
-	binary.BigEndian.PutUint64(pressureBytes[24:32], uint64(gp.Pressure.Density*1e9))
+	binary.BigEndian.PutUint64(pressureBytes[0:8], uint64(gp.Pressure.Hadamard*1e9))
+	binary.BigEndian.PutUint64(pressureBytes[8:16], uint64(gp.Pressure.PauliX*1e9))
+	binary.BigEndian.PutUint64(pressureBytes[16:24], uint64(gp.Pressure.PauliZ*1e9))
+	binary.BigEndian.PutUint64(pressureBytes[24:32], uint64(gp.Pressure.Phase*1e9))
 	payload = append(payload, pressureBytes...)
 
-	
 	inputHash := sha256.Sum256([]byte(gp.InputText))
 	payload = append(payload, inputHash[:]...)
 
-	
 	for i, concept := range gp.Concepts {
-		if i >= 16 { 
+		if i >= 16 {
 			break
 		}
 		conceptHash := sha256.Sum256([]byte(concept))
-		payload = append(payload, conceptHash[:16]...) 
+		payload = append(payload, conceptHash[:16]...)
 	}
 
 	return payload
 }
-
 
 type HashStream struct {
 	hashes    [][]byte
@@ -846,7 +771,6 @@ type HashStream struct {
 	bytesUsed int
 }
 
-
 func NewHashStream(hashes [][]byte) *HashStream {
 	return &HashStream{
 		hashes:  hashes,
@@ -854,7 +778,6 @@ func NewHashStream(hashes [][]byte) *HashStream {
 		byteIdx: 0,
 	}
 }
-
 
 func (hs *HashStream) Next(n int) []byte {
 	if len(hs.hashes) == 0 {
@@ -866,10 +789,10 @@ func (hs *HashStream) Next(n int) []byte {
 
 	for written < n {
 		if hs.hashIdx >= len(hs.hashes) {
-			
+
 			hs.hashIdx = 0
 			hs.byteIdx = 0
-			
+
 			if len(hs.hashes) > 0 && len(hs.hashes[0]) > 0 {
 				hs.hashes[0][0] ^= byte(hs.bytesUsed)
 			}
@@ -904,7 +827,6 @@ func (hs *HashStream) Next(n int) []byte {
 	return result
 }
 
-
 func (hs *HashStream) NextInt(max int) int {
 	if max <= 0 {
 		return 0
@@ -917,29 +839,25 @@ func (hs *HashStream) NextInt(max int) int {
 	return val % max
 }
 
-
 func (dg *DistributedGrammar) GenerateDistributedV2(
 	inputText string,
 	concepts []string,
 	pressure PressureContext,
 ) (string, error) {
-	
+
 	parsed := dg.parseLocal(inputText)
 
 	fmt.Printf("[Grammar-V2] Input: %q, Type: %v, Intent: %s\n", inputText, parsed.Type, parsed.Intent)
 
-	
 	if parsed.Intent == "greeting" {
 		return "Hello.", nil
 	}
 
-	
 	allConcepts := mergeConceptsUnique(parsed.Concepts, concepts)
 	if len(allConcepts) == 0 {
 		return "", nil
 	}
 
-	
 	payload := EncodeGrammarPayloadV2(&GrammarPayloadV2{
 		InputText:    inputText,
 		Concepts:     allConcepts,
@@ -955,14 +873,11 @@ func (dg *DistributedGrammar) GenerateDistributedV2(
 
 	fmt.Printf("[Grammar-V2] Got %d hashes from L1 (single broadcast)\n", len(hashes))
 
-	
 	stream := NewHashStream(hashes)
 
-	
 	pattern := dg.selectPatternFromStream(stream, parsed.Intent)
 	sentence := NewSentence(pattern)
 
-	
 	usedWords := make(map[string]bool)
 	conceptIdx := 0
 
@@ -972,22 +887,19 @@ func (dg *DistributedGrammar) GenerateDistributedV2(
 			continue
 		}
 
-		
 		concept := ""
 		if conceptIdx < len(allConcepts) {
 			concept = allConcepts[conceptIdx]
 			conceptIdx++
 		}
 
-		
 		word := dg.selectWordFromStream(stream, slot.POS, concept, allConcepts, usedWords)
 		if word == "" {
 			continue
 		}
 
-		
 		var modifiers []string
-		if slot.Modifiable && pressure.Density > 0.5 {
+		if slot.Modifiable && pressure.Phase > 0.5 {
 			mod := dg.selectModifierFromStream(stream, slot.POS, allConcepts, usedWords)
 			if mod != "" {
 				modifiers = append(modifiers, mod)
@@ -1002,7 +914,6 @@ func (dg *DistributedGrammar) GenerateDistributedV2(
 	return sentence.Build(), nil
 }
 
-
 func (dg *DistributedGrammar) parseLocal(text string) *ParsedSentence {
 	result := &ParsedSentence{
 		Original: text,
@@ -1010,14 +921,11 @@ func (dg *DistributedGrammar) parseLocal(text string) *ParsedSentence {
 		Concepts: make([]string, 0),
 	}
 
-	
 	result.Type = detectSentenceTypeFromText(text)
 	result.Intent = detectIntentFromText(text, result.Type)
 
-	
 	tokens := tokenizeSimple(text)
 
-	
 	for i, token := range tokens {
 		var pos PartOfSpeech = POS_Noun
 		if dg.POSLookup != nil {
@@ -1035,19 +943,16 @@ func (dg *DistributedGrammar) parseLocal(text string) *ParsedSentence {
 		}
 		result.Words = append(result.Words, word)
 
-		
 		if isContentWordSimple(word) {
 			result.Concepts = append(result.Concepts, token)
 		}
 	}
 
-	
 	dg.identifyRolesFromPOS(result)
 	result.IsComplete = result.Subject != nil && result.Verb != nil
 
 	return result
 }
-
 
 func (dg *DistributedGrammar) selectPatternFromStream(stream *HashStream, intent string) *SentencePattern {
 	patterns := GetPatternsForIntent(intent)
@@ -1058,7 +963,6 @@ func (dg *DistributedGrammar) selectPatternFromStream(stream *HashStream, intent
 	return patterns[idx]
 }
 
-
 func (dg *DistributedGrammar) selectWordFromStream(
 	stream *HashStream,
 	targetPOS PartOfSpeech,
@@ -1066,7 +970,7 @@ func (dg *DistributedGrammar) selectWordFromStream(
 	allConcepts []string,
 	used map[string]bool,
 ) string {
-	
+
 	available := make([]string, 0)
 	for _, c := range allConcepts {
 		if used[c] {
@@ -1083,7 +987,6 @@ func (dg *DistributedGrammar) selectWordFromStream(
 		return available[stream.NextInt(len(available))]
 	}
 
-	
 	if dg.SynsetLookup != nil && dg.SynsetByID != nil {
 		related := make([]string, 0)
 		for _, c := range allConcepts {
@@ -1110,7 +1013,6 @@ func (dg *DistributedGrammar) selectWordFromStream(
 		}
 	}
 
-	
 	if dg.GetSynonyms != nil && dg.POSLookup != nil {
 		for _, c := range allConcepts {
 			if used[c] {
@@ -1129,7 +1031,6 @@ func (dg *DistributedGrammar) selectWordFromStream(
 		}
 	}
 
-	
 	fallbacks := getFallbackWords(targetPOS)
 	if len(fallbacks) > 0 {
 		return fallbacks[stream.NextInt(len(fallbacks))]
@@ -1137,7 +1038,6 @@ func (dg *DistributedGrammar) selectWordFromStream(
 
 	return ""
 }
-
 
 func (dg *DistributedGrammar) selectModifierFromStream(
 	stream *HashStream,
@@ -1150,7 +1050,6 @@ func (dg *DistributedGrammar) selectModifierFromStream(
 		modPOS = POS_Adverb
 	}
 
-	
 	for _, c := range concepts {
 		if used[c] {
 			continue
@@ -1160,7 +1059,6 @@ func (dg *DistributedGrammar) selectModifierFromStream(
 		}
 	}
 
-	
 	if dg.WordsByPOS != nil {
 		words := dg.WordsByPOS(string(modPOS), 20)
 		if len(words) > 0 {
@@ -1170,7 +1068,6 @@ func (dg *DistributedGrammar) selectModifierFromStream(
 
 	return ""
 }
-
 
 func mergeConceptsUnique(a, b []string) []string {
 	seen := make(map[string]bool)
@@ -1190,28 +1087,23 @@ func mergeConceptsUnique(a, b []string) []string {
 	return result
 }
 
-
 type FlowComputeInterface interface {
 	NextBytes(n int) []byte
 	NextUint64() uint64
 	SelectIndex(n int) int
 }
 
-
 type FlowToHashStream struct {
 	flow FlowComputeInterface
 }
-
 
 func NewFlowToHashStream(flow FlowComputeInterface) *FlowToHashStream {
 	return &FlowToHashStream{flow: flow}
 }
 
-
 func (fh *FlowToHashStream) Next(n int) []byte {
 	return fh.flow.NextBytes(n)
 }
-
 
 func (fh *FlowToHashStream) NextInt(max int) int {
 	if max <= 0 {
@@ -1219,7 +1111,6 @@ func (fh *FlowToHashStream) NextInt(max int) int {
 	}
 	return fh.flow.SelectIndex(max)
 }
-
 
 func (dg *DistributedGrammar) GenerateFlowPowered(
 	inputText string,
@@ -1231,27 +1122,22 @@ func (dg *DistributedGrammar) GenerateFlowPowered(
 		return "", fmt.Errorf("flow compute required for flow-powered generation")
 	}
 
-	
 	adapter := NewFlowToHashStream(flowCompute)
 
-	
 	parsed := dg.parseLocal(inputText)
 
 	fmt.Printf("[Grammar-V3-Flow] Input: %q, Intent: %s (NO BROADCAST - using mempool flow)\n",
 		inputText, parsed.Intent)
 
-	
 	if parsed.Intent == "greeting" {
 		return "Hello.", nil
 	}
 
-	
 	allConcepts := mergeConceptsUnique(parsed.Concepts, concepts)
 	if len(allConcepts) == 0 {
 		allConcepts = []string{"concept", "topic", "matter"}
 	}
 
-	
 	patterns := GetPatternsForIntent(parsed.Intent)
 	if len(patterns) == 0 {
 		patterns = []*SentencePattern{PatternDeclarativeSVO}
@@ -1259,34 +1145,29 @@ func (dg *DistributedGrammar) GenerateFlowPowered(
 	patternIdx := adapter.NextInt(len(patterns))
 	pattern := patterns[patternIdx]
 
-	
 	sentence := NewSentence(pattern)
 	usedWords := make(map[string]bool)
 	conceptIdx := 0
 
-	
 	for _, slot := range pattern.Slots {
 		if slot.FixedWord != "" {
 			sentence.FillSlot(slot.Name, slot.FixedWord)
 			continue
 		}
 
-		
 		concept := ""
 		if conceptIdx < len(allConcepts) {
 			concept = allConcepts[conceptIdx]
 			conceptIdx++
 		}
 
-		
 		word := dg.selectWordFromFlowAdapter(adapter, slot.POS, concept, allConcepts, usedWords)
 		if word == "" {
 			continue
 		}
 
-		
 		var modifiers []string
-		if slot.Modifiable && pressure.Density > 0.5 {
+		if slot.Modifiable && pressure.Phase > 0.5 {
 			mod := dg.selectModifierFromFlowAdapter(adapter, slot.POS, allConcepts, usedWords)
 			if mod != "" {
 				modifiers = []string{mod}
@@ -1306,7 +1187,6 @@ func (dg *DistributedGrammar) GenerateFlowPowered(
 	return result, nil
 }
 
-
 func (dg *DistributedGrammar) selectWordFromFlowAdapter(
 	adapter *FlowToHashStream,
 	targetPOS PartOfSpeech,
@@ -1314,7 +1194,7 @@ func (dg *DistributedGrammar) selectWordFromFlowAdapter(
 	allConcepts []string,
 	used map[string]bool,
 ) string {
-	
+
 	available := make([]string, 0)
 	for _, c := range allConcepts {
 		if used[c] {
@@ -1331,7 +1211,6 @@ func (dg *DistributedGrammar) selectWordFromFlowAdapter(
 		return available[adapter.NextInt(len(available))]
 	}
 
-	
 	if dg.SynsetLookup != nil && dg.SynsetByID != nil {
 		related := make([]string, 0)
 		for _, c := range allConcepts {
@@ -1358,7 +1237,6 @@ func (dg *DistributedGrammar) selectWordFromFlowAdapter(
 		}
 	}
 
-	
 	if dg.GetSynonyms != nil && dg.POSLookup != nil {
 		for _, c := range allConcepts {
 			if used[c] {
@@ -1377,7 +1255,6 @@ func (dg *DistributedGrammar) selectWordFromFlowAdapter(
 		}
 	}
 
-	
 	fallbacks := getFallbackWords(targetPOS)
 	if len(fallbacks) > 0 {
 		return fallbacks[adapter.NextInt(len(fallbacks))]
@@ -1385,7 +1262,6 @@ func (dg *DistributedGrammar) selectWordFromFlowAdapter(
 
 	return ""
 }
-
 
 func (dg *DistributedGrammar) selectModifierFromFlowAdapter(
 	adapter *FlowToHashStream,
@@ -1398,7 +1274,6 @@ func (dg *DistributedGrammar) selectModifierFromFlowAdapter(
 		modPOS = POS_Adverb
 	}
 
-	
 	for _, c := range concepts {
 		if used[c] {
 			continue
@@ -1408,7 +1283,6 @@ func (dg *DistributedGrammar) selectModifierFromFlowAdapter(
 		}
 	}
 
-	
 	if dg.WordsByPOS != nil {
 		words := dg.WordsByPOS(string(modPOS), 20)
 		if len(words) > 0 {
@@ -1419,13 +1293,11 @@ func (dg *DistributedGrammar) selectModifierFromFlowAdapter(
 	return ""
 }
 
-
 type FlowGrammarStats struct {
 	TotalGenerations uint64
 	TotalBytesUsed   uint64
 	AvgBytesPerGen   float64
 }
-
 
 type DistributedGrammarV3 struct {
 	*DistributedGrammar
@@ -1434,14 +1306,12 @@ type DistributedGrammarV3 struct {
 	mu          sync.Mutex
 }
 
-
 func NewDistributedGrammarV3(dg *DistributedGrammar, flowCompute FlowComputeInterface) *DistributedGrammarV3 {
 	return &DistributedGrammarV3{
 		DistributedGrammar: dg,
 		flowCompute:        flowCompute,
 	}
 }
-
 
 func (dg3 *DistributedGrammarV3) Generate(inputText string, concepts []string, pressure PressureContext) (string, error) {
 	result, err := dg3.DistributedGrammar.GenerateFlowPowered(inputText, concepts, pressure, dg3.flowCompute)
@@ -1452,7 +1322,6 @@ func (dg3 *DistributedGrammarV3) Generate(inputText string, concepts []string, p
 
 	return result, err
 }
-
 
 func (dg3 *DistributedGrammarV3) Stats() FlowGrammarStats {
 	dg3.mu.Lock()

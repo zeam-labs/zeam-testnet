@@ -1,11 +1,8 @@
-
-
 package grammar
 
 import (
 	"strings"
 )
-
 
 type PartOfSpeech string
 
@@ -22,41 +19,36 @@ const (
 	POS_Any        PartOfSpeech = "*"
 )
 
-
 type GrammarSlot struct {
-	Name        string       
-	POS         PartOfSpeech 
-	Required    bool         
-	Modifiable  bool         
-	Article     string       
-	FixedWord   string       
+	Name        string
+	POS         PartOfSpeech
+	Required    bool
+	Modifiable  bool
+	Article     string
+	FixedWord   string
 }
-
 
 type SentencePattern struct {
-	Name        string        
-	Description string        
-	Slots       []GrammarSlot 
-	Punctuation string        
-	IntentType  string        
+	Name        string
+	Description string
+	Slots       []GrammarSlot
+	Punctuation string
+	IntentType  string
 }
-
 
 type FilledSlot struct {
 	Slot      GrammarSlot
-	MainWord  string   
-	Modifiers []string 
+	MainWord  string
+	Modifiers []string
 }
-
 
 type Sentence struct {
 	Pattern     *SentencePattern
 	FilledSlots []FilledSlot
 }
 
-
 var (
-	
+
 	PatternDeclarativeSVO = &SentencePattern{
 		Name:        "declarative_svo",
 		Description: "Subject-Verb-Object statement",
@@ -69,7 +61,6 @@ var (
 		},
 	}
 
-	
 	PatternDeclarativeSV = &SentencePattern{
 		Name:        "declarative_sv",
 		Description: "Subject-Verb intransitive statement",
@@ -81,7 +72,6 @@ var (
 		},
 	}
 
-	
 	PatternDeclarativeAdj = &SentencePattern{
 		Name:        "declarative_adj",
 		Description: "Subject is adjective",
@@ -94,7 +84,6 @@ var (
 		},
 	}
 
-	
 	PatternGreeting = &SentencePattern{
 		Name:        "greeting",
 		Description: "Greeting response",
@@ -105,7 +94,6 @@ var (
 		},
 	}
 
-	
 	PatternQuestionWH = &SentencePattern{
 		Name:        "question_wh",
 		Description: "WH-question (what, how, why)",
@@ -119,7 +107,6 @@ var (
 		},
 	}
 
-	
 	PatternQuestionYesNo = &SentencePattern{
 		Name:        "question_yesno",
 		Description: "Yes/No question",
@@ -133,7 +120,6 @@ var (
 		},
 	}
 
-	
 	PatternExplanation = &SentencePattern{
 		Name:        "explanation",
 		Description: "Explanatory statement",
@@ -148,7 +134,6 @@ var (
 		},
 	}
 
-	
 	PatternImperative = &SentencePattern{
 		Name:        "imperative",
 		Description: "Command/imperative",
@@ -160,7 +145,6 @@ var (
 		},
 	}
 
-	
 	PatternDefinition = &SentencePattern{
 		Name:        "definition",
 		Description: "Definition pattern",
@@ -177,7 +161,6 @@ var (
 	}
 )
 
-
 var AllPatterns = []*SentencePattern{
 	PatternDeclarativeSVO,
 	PatternDeclarativeSV,
@@ -190,18 +173,16 @@ var AllPatterns = []*SentencePattern{
 	PatternDefinition,
 }
 
-
 func GetPatternForIntent(intent string) *SentencePattern {
-	
+
 	for _, p := range AllPatterns {
 		if p.IntentType == intent {
 			return p
 		}
 	}
-	
+
 	return PatternDeclarativeSVO
 }
-
 
 func GetPatternsForIntent(intent string) []*SentencePattern {
 	patterns := make([]*SentencePattern, 0)
@@ -216,7 +197,6 @@ func GetPatternsForIntent(intent string) []*SentencePattern {
 	return patterns
 }
 
-
 func (s *Sentence) Build() string {
 	if s.Pattern == nil || len(s.FilledSlots) == 0 {
 		return ""
@@ -225,22 +205,19 @@ func (s *Sentence) Build() string {
 	words := make([]string, 0)
 
 	for _, fs := range s.FilledSlots {
-		
+
 		if fs.Slot.Article != "" && fs.Slot.POS == POS_Noun {
 			words = append(words, fs.Slot.Article)
 		}
 
-		
 		if fs.Slot.POS == POS_Noun && len(fs.Modifiers) > 0 {
 			words = append(words, fs.Modifiers...)
 		}
 
-		
 		if fs.MainWord != "" {
 			words = append(words, fs.MainWord)
 		}
 
-		
 		if fs.Slot.POS == POS_Verb && len(fs.Modifiers) > 0 {
 			words = append(words, fs.Modifiers...)
 		}
@@ -250,22 +227,18 @@ func (s *Sentence) Build() string {
 		return ""
 	}
 
-	
 	sentence := strings.Join(words, " ")
 
-	
 	if len(sentence) > 0 {
 		sentence = strings.ToUpper(string(sentence[0])) + sentence[1:]
 	}
 
-	
 	if !strings.HasSuffix(sentence, s.Pattern.Punctuation) {
 		sentence += s.Pattern.Punctuation
 	}
 
 	return sentence
 }
-
 
 func NewSentence(pattern *SentencePattern) *Sentence {
 	return &Sentence{
@@ -274,11 +247,10 @@ func NewSentence(pattern *SentencePattern) *Sentence {
 	}
 }
 
-
 func (s *Sentence) FillSlot(slotName string, word string, modifiers ...string) bool {
 	for i, slot := range s.Pattern.Slots {
 		if slot.Name == slotName {
-			
+
 			alreadyFilled := false
 			for _, fs := range s.FilledSlots {
 				if fs.Slot.Name == slotName {
@@ -290,13 +262,11 @@ func (s *Sentence) FillSlot(slotName string, word string, modifiers ...string) b
 				return false
 			}
 
-			
 			finalWord := word
 			if slot.FixedWord != "" {
 				finalWord = slot.FixedWord
 			}
 
-			
 			insertPos := len(s.FilledSlots)
 			for j, fs := range s.FilledSlots {
 				for k, ps := range s.Pattern.Slots {
@@ -313,7 +283,6 @@ func (s *Sentence) FillSlot(slotName string, word string, modifiers ...string) b
 				Modifiers: modifiers,
 			}
 
-			
 			if insertPos >= len(s.FilledSlots) {
 				s.FilledSlots = append(s.FilledSlots, filled)
 			} else {
@@ -326,7 +295,6 @@ func (s *Sentence) FillSlot(slotName string, word string, modifiers ...string) b
 	}
 	return false
 }
-
 
 func (s *Sentence) GetRequiredPOS() []PartOfSpeech {
 	required := make([]PartOfSpeech, 0)
@@ -345,11 +313,9 @@ func (s *Sentence) GetRequiredPOS() []PartOfSpeech {
 	return required
 }
 
-
 func (s *Sentence) IsComplete() bool {
 	return len(s.GetRequiredPOS()) == 0
 }
-
 
 func (s *Sentence) GetNextSlot() *GrammarSlot {
 	filledNames := make(map[string]bool)

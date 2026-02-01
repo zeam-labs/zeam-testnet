@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-
 type Mesh struct {
 	Chains          map[string]*Chain
 	Pressure        *PressureTracker
@@ -15,25 +14,22 @@ type Mesh struct {
 	gateStopChs     map[string]chan struct{}
 	mu              sync.RWMutex
 
-	
 	InitialAmplitude float64
 	InitialPhase     float64
 	DecayInterval    time.Duration
 	DecayHalfLife    time.Duration
 }
 
-
 type MeshConfig struct {
-	NumChains        int           
-	BlockDiameter    int           
-	InitialAmplitude float64       
-	InitialPhase     float64       
-	DecayInterval    time.Duration 
-	DecayHalfLife    time.Duration 
-	FreqMin          float64       
-	FreqMax          float64       
+	NumChains        int
+	BlockDiameter    int
+	InitialAmplitude float64
+	InitialPhase     float64
+	DecayInterval    time.Duration
+	DecayHalfLife    time.Duration
+	FreqMin          float64
+	FreqMax          float64
 }
-
 
 func DefaultMeshConfig() MeshConfig {
 	return MeshConfig{
@@ -48,7 +44,6 @@ func DefaultMeshConfig() MeshConfig {
 	}
 }
 
-
 func NewMesh(config MeshConfig) *Mesh {
 	InitChainFrequency()
 	InitCurrentBlock()
@@ -56,25 +51,27 @@ func NewMesh(config MeshConfig) *Mesh {
 
 	chains := make(map[string]*Chain)
 
-	
 	freqRange := config.FreqMax - config.FreqMin
+	gateTypes := []string{"hadamard", "paulix", "pauliz"}
+
 	for i := 0; i < config.NumChains; i++ {
 		chainID := fmt.Sprintf("chain_%d", i)
 
-		
 		freq := config.FreqMin + (freqRange * float64(i) / float64(config.NumChains))
 		SetChainFrequency(chainID, freq)
 
+		gateType := gateTypes[i%len(gateTypes)]
 		chains[chainID] = &Chain{
 			ID:       chainID,
 			Diameter: config.BlockDiameter,
 			Blocks:   []Block{},
-			Gates:    []Gate{},
-			Anchors:  []string{},
+			Gates: []Gate{
+				{Position: 0, Restriction: 32, Type: gateType},
+			},
+			Anchors: []string{},
 		}
 	}
 
-	
 	for id := range chains {
 		for otherID := range chains {
 			if id != otherID {
@@ -94,18 +91,15 @@ func NewMesh(config MeshConfig) *Mesh {
 		DecayHalfLife:    config.DecayHalfLife,
 	}
 
-	
 	InitWaveOrigin(config.InitialAmplitude, config.InitialPhase)
 
 	return mesh
 }
 
-
 func (m *Mesh) Start() {
-	
+
 	go m.Pressure.StartDecayLoop(m.DecayInterval, m.DecayHalfLife, m.stopCh)
 
-	
 	m.mu.Lock()
 	for chainID, chain := range m.Chains {
 		for i := range chain.Gates {
@@ -114,13 +108,13 @@ func (m *Mesh) Start() {
 			m.gateStopChs[fmt.Sprintf("%s_gate_%d", chainID, i)] = stopCh
 
 			go gate.StartGateMonitor(chainID, func() int {
-				return m.Pressure.GetEventCount()
+
+				return int(m.Pressure.GetTotalPressure())
 			}, stopCh)
 		}
 	}
 	m.mu.Unlock()
 }
-
 
 func (m *Mesh) Stop() {
 	close(m.stopCh)
@@ -132,7 +126,6 @@ func (m *Mesh) Stop() {
 	m.gateStopChs = make(map[string]chan struct{})
 	m.mu.Unlock()
 }
-
 
 func (m *Mesh) AddBlock(chainID string, block Block) error {
 	m.mu.Lock()
@@ -147,7 +140,6 @@ func (m *Mesh) AddBlock(chainID string, block Block) error {
 	return nil
 }
 
-
 func (m *Mesh) AddGate(chainID string, gate Gate) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -161,35 +153,52 @@ func (m *Mesh) AddGate(chainID string, gate Gate) error {
 	return nil
 }
 
-
 func (m *Mesh) PushData(chainID string, data interface{}, pressure float64) error {
-	
+	m.mu.RLock()
+	chain, exists := m.Chains[chainID]
+	m.mu.RUnlock()
+
+	if !exists || chain == nil {
+		return fmt.Errorf("chain %s not found", chainID)
+	}
+
 	state := ReadState(chainID)
 
-	
-	block, err := EncodeBlock(data, state.Amplitude, state.Phase, len(m.Chains[chainID].Blocks))
+	m.mu.RLock()
+	blockCount := len(chain.Blocks)
+	m.mu.RUnlock()
+
+	block, err := EncodeBlock(data, state.Amplitude, state.Phase, blockCount)
 	if err != nil {
 		return err
 	}
 
-	
 	if err := m.AddBlock(chainID, block); err != nil {
 		return err
 	}
 
-	
+	m.mu.RLock()
+	chain, exists = m.Chains[chainID]
+	newBlockCount := 0
+	if exists && chain != nil {
+		newBlockCount = len(chain.Blocks)
+	}
+	m.mu.RUnlock()
+
+	if newBlockCount == 0 {
+		return fmt.Errorf("chain %s has no blocks after add", chainID)
+	}
+
 	loc := BlockLocation{
 		ChainID:  chainID,
-		BlockIdx: len(m.Chains[chainID].Blocks) - 1,
+		BlockIdx: newBlockCount - 1,
 	}
 	SetCurrentBlock(chainID, loc)
 
-	
 	m.Pressure.AddPressure(loc, pressure)
 
 	return nil
 }
-
 
 func (m *Mesh) FindStrongestResonance() *ResonanceResult {
 	m.mu.RLock()
@@ -197,20 +206,21 @@ func (m *Mesh) FindStrongestResonance() *ResonanceResult {
 	return FindResonance(m.Chains)
 }
 
-
 func (m *Mesh) FindTopResonances(n int) []*ResonanceResult {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return FindTopResonances(m.Chains, n)
 }
 
-
 func (m *Mesh) GetPhaseCoherence() float64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return MeasurePhaseCoherence(m.Chains)
+	return m.getPhaseCoherenceUnlocked()
 }
 
+func (m *Mesh) getPhaseCoherenceUnlocked() float64 {
+	return MeasurePhaseCoherence(m.Chains)
+}
 
 func (m *Mesh) GetChainStates() map[string]QuantumState {
 	m.mu.RLock()
@@ -223,24 +233,29 @@ func (m *Mesh) GetChainStates() map[string]QuantumState {
 	return states
 }
 
-
 func (m *Mesh) CrossAnchor() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	SetCrossAnchors(m.Chains)
 }
 
-
 func (m *Mesh) HashToChain(key string) string {
+	m.mu.RLock()
+	chainCount := len(m.Chains)
+	m.mu.RUnlock()
+
+	if chainCount == 0 {
+		return "chain_0"
+	}
+
 	h := uint64(0)
 	for _, c := range key {
 		h = h*31 + uint64(c)
 	}
 
-	chainIdx := int(h) % len(m.Chains)
+	chainIdx := int(h) % chainCount
 	return fmt.Sprintf("chain_%d", chainIdx)
 }
-
 
 func (m *Mesh) DistributeKeys(keys []string) map[string][]string {
 	distribution := make(map[string][]string)
@@ -252,7 +267,6 @@ func (m *Mesh) DistributeKeys(keys []string) map[string][]string {
 
 	return distribution
 }
-
 
 func (m *Mesh) Stats() map[string]interface{} {
 	m.mu.RLock()
@@ -274,13 +288,12 @@ func (m *Mesh) Stats() map[string]interface{} {
 		"pressure":      m.Pressure.GetTotalPressure(),
 		"events":        m.Pressure.GetEventCount(),
 		"pressure_rate": m.Pressure.GetPressureRate(),
-		"coherence":     m.GetPhaseCoherence(),
+		"coherence":     m.getPhaseCoherenceUnlocked(),
 		"amplitude":     origin.Amplitude,
 		"phase":         origin.Phase,
 		"wave_age_ms":   time.Since(origin.PushTime).Milliseconds(),
 	}
 }
-
 
 func (m *Mesh) ApplyWaveFunction(gateType string) error {
 	origin := GetWaveOrigin()
@@ -301,16 +314,13 @@ func (m *Mesh) ApplyWaveFunction(gateType string) error {
 	return nil
 }
 
-
 func (m *Mesh) GetPressureHotspots(threshold float64) []PressurePoint {
 	return m.Pressure.GetHotspots(threshold)
 }
 
-
 func (m *Mesh) GetTopPressure(n int) []PressurePoint {
 	return m.Pressure.GetTopPressure(n)
 }
-
 
 func (m *Mesh) SetChainFrequencies(freqs map[string]float64) {
 	for chainID, freq := range freqs {
@@ -318,14 +328,12 @@ func (m *Mesh) SetChainFrequencies(freqs map[string]float64) {
 	}
 }
 
-
 func (m *Mesh) GenerateRandomFrequencies(minHz, maxHz float64) {
 	for chainID := range m.Chains {
 		freq := minHz + (maxHz-minHz)*hashToFloat(chainID)
 		SetChainFrequency(chainID, freq)
 	}
 }
-
 
 func hashToFloat(s string) float64 {
 	h := uint64(0)

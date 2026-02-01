@@ -1,4 +1,3 @@
-
 package ngac
 
 import (
@@ -13,7 +12,6 @@ import (
 	"zeam/quantum"
 )
 
-
 type OEWNDatabase struct {
 	Lexes         []Lex         `json:"lexes"`
 	Synsets       []Synset      `json:"synsets"`
@@ -22,25 +20,22 @@ type OEWNDatabase struct {
 	VerbTemplates []interface{} `json:"verbTemplates"`
 }
 
-
 type Lex struct {
 	Lemma        string   `json:"lemma"`
-	Type         string   `json:"type"` 
+	Type         string   `json:"type"`
 	SenseKeys    []string `json:"senseKeys"`
 	Discriminant *string  `json:"discriminant"`
 	Source       string   `json:"source"`
 }
 
-
 type Synset struct {
 	SynsetId    string   `json:"synsetId"`
 	Type        string   `json:"type"`
-	Members     []string `json:"members"` 
+	Members     []string `json:"members"`
 	Definitions []string `json:"definitions"`
 	ILI         string   `json:"ili"`
 	Domain      string   `json:"domain"`
 }
-
 
 type Sense struct {
 	SenseId  string   `json:"senseId"`
@@ -51,30 +46,25 @@ type Sense struct {
 	TagCount TagCount `json:"tagCount"`
 }
 
-
 type TagCount struct {
 	Count    int `json:"count"`
 	SenseNum int `json:"senseNum"`
 }
 
-
 type SubstrateDictionary struct {
 	FilePath string
 
-	
-	LemmaIndex  map[string]*Lex     
-	SynsetIndex map[string]*Synset  
-	SenseIndex  map[string]*Sense   
-	LemmaRanked map[string][]string 
+	LemmaIndex  map[string]*Lex
+	SynsetIndex map[string]*Synset
+	SenseIndex  map[string]*Sense
+	LemmaRanked map[string][]string
 
 	mutex sync.RWMutex
 }
 
-
 func BuildDictionaryIndex(jsonPath string) (*SubstrateDictionary, error) {
 	fmt.Println("[NGAC] Building OEWN dictionary index...")
 
-	
 	db, err := loadOEWN(jsonPath)
 	if err != nil {
 		return nil, err
@@ -88,7 +78,6 @@ func BuildDictionaryIndex(jsonPath string) (*SubstrateDictionary, error) {
 		LemmaRanked: make(map[string][]string),
 	}
 
-	
 	fmt.Printf("[NGAC] Indexing %d lexes...\n", len(db.Lexes))
 	for i := range db.Lexes {
 		lex := &db.Lexes[i]
@@ -96,17 +85,14 @@ func BuildDictionaryIndex(jsonPath string) (*SubstrateDictionary, error) {
 		dict.LemmaIndex[key] = lex
 	}
 
-	
 	fmt.Printf("[NGAC] Indexing %d synsets...\n", len(db.Synsets))
 	for i := range db.Synsets {
 		synset := &db.Synsets[i]
 		dict.SynsetIndex[synset.SynsetId] = synset
 	}
 
-	
 	fmt.Printf("[NGAC] Indexing %d senses...\n", len(db.Senses))
 
-	
 	type rankedSense struct {
 		synsetId string
 		tagCount int
@@ -117,11 +103,9 @@ func BuildDictionaryIndex(jsonPath string) (*SubstrateDictionary, error) {
 		sense := &db.Senses[i]
 		dict.SenseIndex[sense.SenseId] = sense
 
-		
 		if sense.Lex.Lemma != "" {
 			key := sense.Type + "." + strings.ToLower(sense.Lex.Lemma)
 
-			
 			tagCount := 0
 			if sense.TagCount.Count > 0 {
 				tagCount = sense.TagCount.Count
@@ -134,9 +118,8 @@ func BuildDictionaryIndex(jsonPath string) (*SubstrateDictionary, error) {
 		}
 	}
 
-	
 	for key, senses := range lemmaGroups {
-		
+
 		for i := 0; i < len(senses); i++ {
 			for j := i + 1; j < len(senses); j++ {
 				if senses[j].tagCount > senses[i].tagCount {
@@ -145,7 +128,6 @@ func BuildDictionaryIndex(jsonPath string) (*SubstrateDictionary, error) {
 			}
 		}
 
-		
 		synsetIds := make([]string, len(senses))
 		for i, s := range senses {
 			synsetIds[i] = s.synsetId
@@ -158,7 +140,6 @@ func BuildDictionaryIndex(jsonPath string) (*SubstrateDictionary, error) {
 
 	return dict, nil
 }
-
 
 func loadOEWN(path string) (*OEWNDatabase, error) {
 	file, err := os.Open(path)
@@ -178,21 +159,17 @@ func loadOEWN(path string) (*OEWNDatabase, error) {
 	return &db, nil
 }
 
-
 func (sd *SubstrateDictionary) QueryWord(coord *big.Int) []*Synset {
 	sd.mutex.RLock()
 	defer sd.mutex.RUnlock()
 
-	
 	word := strings.ToLower(quantum.UTF8_DECODE(coord))
 
-	
 	lex, exists := sd.LemmaIndex[word]
 	if !exists {
 		return nil
 	}
 
-	
 	synsets := make([]*Synset, 0)
 	for _, senseKey := range lex.SenseKeys {
 		sense, ok := sd.SenseIndex[senseKey]
@@ -211,16 +188,14 @@ func (sd *SubstrateDictionary) QueryWord(coord *big.Int) []*Synset {
 	return synsets
 }
 
-
 func (sd *SubstrateDictionary) GetDefinition(coord *big.Int) string {
 	word := strings.ToLower(quantum.UTF8_DECODE(coord))
 
-	
 	posTypes := []string{"n", "v", "a", "r"}
 	for _, pos := range posTypes {
 		key := pos + "." + word
 		if synsetIDs, exists := sd.LemmaRanked[key]; exists && len(synsetIDs) > 0 {
-			
+
 			if synset, ok := sd.SynsetIndex[synsetIDs[0]]; ok {
 				if len(synset.Definitions) > 0 {
 					return synset.Definitions[0]
@@ -229,7 +204,6 @@ func (sd *SubstrateDictionary) GetDefinition(coord *big.Int) string {
 		}
 	}
 
-	
 	synsets := sd.QueryWord(coord)
 	if len(synsets) > 0 && len(synsets[0].Definitions) > 0 {
 		return synsets[0].Definitions[0]
@@ -237,7 +211,6 @@ func (sd *SubstrateDictionary) GetDefinition(coord *big.Int) string {
 
 	return ""
 }
-
 
 func (sd *SubstrateDictionary) GetPartOfSpeech(coord *big.Int) string {
 	word := strings.ToLower(quantum.UTF8_DECODE(coord))
@@ -248,7 +221,6 @@ func (sd *SubstrateDictionary) GetPartOfSpeech(coord *big.Int) string {
 	return lex.Type
 }
 
-
 func (sd *SubstrateDictionary) GetSynonyms(coord *big.Int) []string {
 	synsets := sd.QueryWord(coord)
 	if len(synsets) == 0 {
@@ -258,7 +230,6 @@ func (sd *SubstrateDictionary) GetSynonyms(coord *big.Int) []string {
 	word := strings.ToLower(quantum.UTF8_DECODE(coord))
 	synonyms := make([]string, 0)
 
-	
 	for _, member := range synsets[0].Members {
 		if strings.ToLower(member) != word {
 			synonyms = append(synonyms, member)
@@ -268,13 +239,11 @@ func (sd *SubstrateDictionary) GetSynonyms(coord *big.Int) []string {
 	return synonyms
 }
 
-
 func (sd *SubstrateDictionary) WordExists(coord *big.Int) bool {
 	word := strings.ToLower(quantum.UTF8_DECODE(coord))
 	_, exists := sd.LemmaIndex[word]
 	return exists
 }
-
 
 func InitializeSemanticField(sc *quantum.SubstrateChain, dict *SubstrateDictionary, words []string) error {
 	fmt.Printf("[NGAC] Initializing semantic field with %d words...\n", len(words))
@@ -283,34 +252,27 @@ func InitializeSemanticField(sc *quantum.SubstrateChain, dict *SubstrateDictiona
 	for _, word := range words {
 		coord := quantum.UTF8_ENCODE(sc, strings.ToLower(word))
 
-		
 		if !dict.WordExists(coord) {
 			continue
 		}
 
-		
 		synsets := dict.QueryWord(coord)
 		if len(synsets) == 0 {
 			continue
 		}
 
-		
 		sc.SetAmplitude(coord, complex(1, 0))
 
-		
 		basePhase := calculatePhaseFromSynsetID(synsets[0].SynsetId)
 		sc.SetPhase(coord, complex(math.Cos(basePhase), math.Sin(basePhase)))
 
-		
 		synonyms := dict.GetSynonyms(coord)
 		for _, syn := range synonyms {
 			synCoord := quantum.UTF8_ENCODE(sc, strings.ToLower(syn))
 
-			
 			sc.SetAmplitude(synCoord, complex(1, 0))
 			sc.SetPhase(synCoord, complex(math.Cos(basePhase), math.Sin(basePhase)))
 
-			
 			quantum.COMPOSE(sc, coord, synCoord)
 		}
 
@@ -321,7 +283,6 @@ func InitializeSemanticField(sc *quantum.SubstrateChain, dict *SubstrateDictiona
 	return nil
 }
 
-
 func calculatePhaseFromSynsetID(synsetId string) float64 {
 	hash := 0
 	for _, ch := range synsetId {
@@ -329,7 +290,6 @@ func calculatePhaseFromSynsetID(synsetId string) float64 {
 	}
 	return float64(hash%360) * (math.Pi / 180.0)
 }
-
 
 func (sd *SubstrateDictionary) GetSynsetsForWord(word string) []string {
 	sd.mutex.RLock()
@@ -351,13 +311,11 @@ func (sd *SubstrateDictionary) GetSynsetsForWord(word string) []string {
 	return synsetIDs
 }
 
-
 func (sd *SubstrateDictionary) GetSynsetByID(synsetID string) *Synset {
 	sd.mutex.RLock()
 	defer sd.mutex.RUnlock()
 	return sd.SynsetIndex[synsetID]
 }
-
 
 func (sd *SubstrateDictionary) GetAllWords() []string {
 	words := make([]string, 0, len(sd.LemmaIndex))
@@ -366,7 +324,6 @@ func (sd *SubstrateDictionary) GetAllWords() []string {
 	}
 	return words
 }
-
 
 func (sd *SubstrateDictionary) GetWordsByPOS(pos string, limit int) []string {
 	words := make([]string, 0)
@@ -383,14 +340,12 @@ func (sd *SubstrateDictionary) GetWordsByPOS(pos string, limit int) []string {
 	return words
 }
 
-
 func (sd *SubstrateDictionary) GetRandomWords(n int) []string {
 	allWords := sd.GetAllWords()
 	if n > len(allWords) {
 		n = len(allWords)
 	}
 
-	
 	words := make([]string, 0, n)
 	step := len(allWords) / n
 	for i := 0; i < n; i++ {
@@ -399,7 +354,6 @@ func (sd *SubstrateDictionary) GetRandomWords(n int) []string {
 
 	return words
 }
-
 
 func ApplySimpleGrammar(words []string, dict *SubstrateDictionary, sc *quantum.SubstrateChain) string {
 	if len(words) == 0 {
@@ -412,7 +366,6 @@ func ApplySimpleGrammar(words []string, dict *SubstrateDictionary, sc *quantum.S
 		coord := quantum.UTF8_ENCODE(sc, word)
 		pos := dict.GetPartOfSpeech(coord)
 
-		
 		if pos == "n" && i == 0 {
 			result = append(result, "the")
 		} else if pos == "n" && i > 0 {
@@ -429,7 +382,6 @@ func ApplySimpleGrammar(words []string, dict *SubstrateDictionary, sc *quantum.S
 	return strings.Join(result, " ")
 }
 
-
 func (sd *SubstrateDictionary) CollapseToSynsets(hashBytes []byte) []*Synset {
 	sd.mutex.RLock()
 	defer sd.mutex.RUnlock()
@@ -440,7 +392,6 @@ func (sd *SubstrateDictionary) CollapseToSynsets(hashBytes []byte) []*Synset {
 
 	synsets := make([]*Synset, 0)
 
-	
 	synsetIDs := make([]string, 0, len(sd.SynsetIndex))
 	for id := range sd.SynsetIndex {
 		synsetIDs = append(synsetIDs, id)
@@ -450,13 +401,11 @@ func (sd *SubstrateDictionary) CollapseToSynsets(hashBytes []byte) []*Synset {
 		return nil
 	}
 
-	
 	for i := 0; i+3 < len(hashBytes) && i < 16; i += 4 {
-		
+
 		idx := uint32(hashBytes[i])<<24 | uint32(hashBytes[i+1])<<16 |
 			uint32(hashBytes[i+2])<<8 | uint32(hashBytes[i+3])
 
-		
 		synsetIdx := int(idx % uint32(len(synsetIDs)))
 		synsetID := synsetIDs[synsetIdx]
 
@@ -467,7 +416,6 @@ func (sd *SubstrateDictionary) CollapseToSynsets(hashBytes []byte) []*Synset {
 
 	return synsets
 }
-
 
 func (sd *SubstrateDictionary) CollapseToWords(hashBytes []byte) []string {
 	synsets := sd.CollapseToSynsets(hashBytes)
@@ -480,7 +428,7 @@ func (sd *SubstrateDictionary) CollapseToWords(hashBytes []byte) []string {
 
 	for _, synset := range synsets {
 		if len(synset.Members) > 0 {
-			
+
 			memberIdx := int(hashBytes[0]) % len(synset.Members)
 			word := synset.Members[memberIdx]
 
@@ -494,12 +442,10 @@ func (sd *SubstrateDictionary) CollapseToWords(hashBytes []byte) []string {
 	return words
 }
 
-
 func (sd *SubstrateDictionary) CollapseToSemanticVector(hashBytes []byte) map[string]float64 {
 	sd.mutex.RLock()
 	defer sd.mutex.RUnlock()
 
-	
 	typeCounts := make(map[string]int)
 	total := 0
 
@@ -509,7 +455,6 @@ func (sd *SubstrateDictionary) CollapseToSemanticVector(hashBytes []byte) map[st
 		total++
 	}
 
-	
 	vector := make(map[string]float64)
 	if total > 0 {
 		for typ, count := range typeCounts {
@@ -520,32 +465,25 @@ func (sd *SubstrateDictionary) CollapseToSemanticVector(hashBytes []byte) map[st
 	return vector
 }
 
-
 func (sd *SubstrateDictionary) HashToSentence(hashBytes []byte, sc *quantum.SubstrateChain) string {
 	words := sd.CollapseToWords(hashBytes)
 	if len(words) == 0 {
 		return ""
 	}
 
-	
 	return ApplySimpleGrammar(words, sd, sc)
 }
 
-
 type CollapseContext struct {
-	
+
 	AccumulatedHash []byte
 
-	
 	ActiveSynsets []*Synset
 
-	
 	SemanticState map[string]float64
 
-	
 	GeneratedWords []string
 }
-
 
 func NewCollapseContext() *CollapseContext {
 	return &CollapseContext{
@@ -556,36 +494,31 @@ func NewCollapseContext() *CollapseContext {
 	}
 }
 
-
 func (cc *CollapseContext) AddCollapse(sd *SubstrateDictionary, hashBytes []byte) {
-	
+
 	cc.AccumulatedHash = append(cc.AccumulatedHash, hashBytes...)
 
-	
 	newSynsets := sd.CollapseToSynsets(hashBytes)
 	cc.ActiveSynsets = append(cc.ActiveSynsets, newSynsets...)
 
-	
 	newVector := sd.CollapseToSemanticVector(hashBytes)
 	for k, v := range newVector {
-		cc.SemanticState[k] = (cc.SemanticState[k] + v) / 2.0 
+		cc.SemanticState[k] = (cc.SemanticState[k] + v) / 2.0
 	}
 
-	
 	words := sd.CollapseToWords(hashBytes)
 	cc.GeneratedWords = append(cc.GeneratedWords, words...)
 }
-
 
 func ClassifyWordType(dict *SubstrateDictionary, coord *big.Int) string {
 	pos := dict.GetPartOfSpeech(coord)
 
 	switch pos {
-	case "n": 
+	case "n":
 		return "taxonomy"
-	case "v": 
+	case "v":
 		return "contextual"
-	case "a": 
+	case "a":
 		return "emotional"
 	default:
 		return "taxonomy"

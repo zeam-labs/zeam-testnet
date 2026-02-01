@@ -1,5 +1,3 @@
-
-
 package quantum
 
 import (
@@ -8,23 +6,18 @@ import (
 	"sync"
 )
 
-
 type WordDecoder struct {
-	
+
 	wordToCoord map[string]*big.Int
 
-	
 	coordToWord map[string]string
 
-	
 	rankedWords []string
 
-	
 	substrate *SubstrateChain
 
 	mu sync.RWMutex
 }
-
 
 func NewWordDecoder(substrate *SubstrateChain, words []string) *WordDecoder {
 	wd := &WordDecoder{
@@ -34,19 +27,16 @@ func NewWordDecoder(substrate *SubstrateChain, words []string) *WordDecoder {
 		substrate:   substrate,
 	}
 
-	
 	for _, word := range words {
 		coord := UTF8_ENCODE(substrate, word)
 		wd.wordToCoord[word] = coord
 
-		
 		key := coordKey(coord)
 		wd.coordToWord[key] = word
 	}
 
 	return wd
 }
-
 
 func coordKey(coord *big.Int) string {
 	if coord == nil {
@@ -56,12 +46,11 @@ func coordKey(coord *big.Int) string {
 	if len(bytes) > 8 {
 		bytes = bytes[:8]
 	}
-	
+
 	padded := make([]byte, 8)
 	copy(padded[8-len(bytes):], bytes)
 	return string(padded)
 }
-
 
 func (wd *WordDecoder) DecodeCoordinate(coord *big.Int) string {
 	if coord == nil {
@@ -71,27 +60,22 @@ func (wd *WordDecoder) DecodeCoordinate(coord *big.Int) string {
 	wd.mu.RLock()
 	defer wd.mu.RUnlock()
 
-	
 	key := coordKey(coord)
 	if word, ok := wd.coordToWord[key]; ok {
 		return word
 	}
 
-	
 	return wd.findClosestWord(coord)
 }
-
 
 func (wd *WordDecoder) findClosestWord(target *big.Int) string {
 	if len(wd.rankedWords) == 0 {
 		return ""
 	}
 
-	
 	idx := new(big.Int).Mod(target, big.NewInt(int64(len(wd.rankedWords)))).Int64()
 	return wd.rankedWords[idx]
 }
-
 
 func (wd *WordDecoder) DecodeCoordinateWithPOS(coord *big.Int, targetPOS string, posLookup func(string) string) string {
 	if coord == nil || len(wd.rankedWords) == 0 {
@@ -101,10 +85,8 @@ func (wd *WordDecoder) DecodeCoordinateWithPOS(coord *big.Int, targetPOS string,
 	wd.mu.RLock()
 	defer wd.mu.RUnlock()
 
-	
 	startIdx := new(big.Int).Mod(coord, big.NewInt(int64(len(wd.rankedWords)))).Int64()
 
-	
 	for offset := 0; offset < len(wd.rankedWords); offset++ {
 		idx := (int(startIdx) + offset) % len(wd.rankedWords)
 		word := wd.rankedWords[idx]
@@ -119,29 +101,25 @@ func (wd *WordDecoder) DecodeCoordinateWithPOS(coord *big.Int, targetPOS string,
 		}
 	}
 
-	
 	return wd.rankedWords[startIdx]
 }
-
 
 func (wd *WordDecoder) DecodeWithPressure(coord *big.Int, pressure PressureMetrics, posLookup func(string) string) string {
 	if coord == nil || len(wd.rankedWords) == 0 {
 		return ""
 	}
 
-	
 	var targetPOS string
-	if pressure.Magnitude > 0.6 {
-		targetPOS = "v" 
-	} else if pressure.Tension > 0.5 {
-		targetPOS = "a" 
-	} else if pressure.Density > 0.5 {
-		targetPOS = "n" 
+	if pressure.Hadamard > 0.6 {
+		targetPOS = "v"
+	} else if pressure.PauliZ > 0.5 {
+		targetPOS = "a"
+	} else if pressure.Phase > 0.5 {
+		targetPOS = "n"
 	}
 
 	return wd.DecodeCoordinateWithPOS(coord, targetPOS, posLookup)
 }
-
 
 func (wd *WordDecoder) EncodeWord(word string) *big.Int {
 	wd.mu.RLock()
@@ -151,10 +129,8 @@ func (wd *WordDecoder) EncodeWord(word string) *big.Int {
 		return new(big.Int).Set(coord)
 	}
 
-	
 	return UTF8_ENCODE(wd.substrate, word)
 }
-
 
 func (wd *WordDecoder) VocabSize() int {
 	wd.mu.RLock()
@@ -162,22 +138,17 @@ func (wd *WordDecoder) VocabSize() int {
 	return len(wd.rankedWords)
 }
 
-
 func (wd *WordDecoder) GetSubstrate() *SubstrateChain {
 	return wd.substrate
 }
 
-
 type SemanticDecoder struct {
 	*WordDecoder
 
-	
 	entanglementGroups map[string][]string
 
-	
 	wordToSynset map[string]string
 }
-
 
 func NewSemanticDecoder(substrate *SubstrateChain, words []string, synonymGroups map[string][]string) *SemanticDecoder {
 	sd := &SemanticDecoder{
@@ -186,17 +157,14 @@ func NewSemanticDecoder(substrate *SubstrateChain, words []string, synonymGroups
 		wordToSynset:       make(map[string]string),
 	}
 
-	
 	for synsetID, synonyms := range synonymGroups {
 		if len(synonyms) == 0 {
 			continue
 		}
 
-		
 		groupCoord := UTF8_ENCODE(substrate, synonyms[0])
 		groupKey := coordKey(groupCoord)
 
-		
 		for _, word := range synonyms {
 			wordCoord := UTF8_ENCODE(substrate, word)
 			wordKey := coordKey(wordCoord)
@@ -204,14 +172,12 @@ func NewSemanticDecoder(substrate *SubstrateChain, words []string, synonymGroups
 			sd.entanglementGroups[groupKey] = append(sd.entanglementGroups[groupKey], wordKey)
 			sd.wordToSynset[word] = synsetID
 
-			
 			COMPOSE(substrate, groupCoord, wordCoord)
 		}
 	}
 
 	return sd
 }
-
 
 func (sd *SemanticDecoder) DecodeWithEntanglement(coord *big.Int, pressure PressureMetrics) string {
 	if coord == nil {
@@ -221,11 +187,10 @@ func (sd *SemanticDecoder) DecodeWithEntanglement(coord *big.Int, pressure Press
 	sd.mu.RLock()
 	defer sd.mu.RUnlock()
 
-	
 	key := coordKey(coord)
 	if group, ok := sd.entanglementGroups[key]; ok && len(group) > 0 {
-		
-		idx := int(pressure.Magnitude * float64(len(group)))
+
+		idx := int(pressure.Hadamard * float64(len(group)))
 		if idx >= len(group) {
 			idx = len(group) - 1
 		}
@@ -236,19 +201,15 @@ func (sd *SemanticDecoder) DecodeWithEntanglement(coord *big.Int, pressure Press
 		}
 	}
 
-	
 	return sd.DecodeCoordinate(coord)
 }
-
 
 type ContextDecoder struct {
 	*SemanticDecoder
 
-	
 	contextWords []string
 	contextSet   map[string]bool
 }
-
 
 func NewContextDecoder(semantic *SemanticDecoder) *ContextDecoder {
 	return &ContextDecoder{
@@ -256,7 +217,6 @@ func NewContextDecoder(semantic *SemanticDecoder) *ContextDecoder {
 		contextSet:      make(map[string]bool),
 	}
 }
-
 
 func (cd *ContextDecoder) SetContext(promptWords []string) {
 	cd.mu.Lock()
@@ -269,7 +229,6 @@ func (cd *ContextDecoder) SetContext(promptWords []string) {
 	}
 }
 
-
 func (cd *ContextDecoder) DecodeInContext(coord *big.Int, pressure PressureMetrics) string {
 	if coord == nil || len(cd.rankedWords) == 0 {
 		return ""
@@ -278,21 +237,19 @@ func (cd *ContextDecoder) DecodeInContext(coord *big.Int, pressure PressureMetri
 	cd.mu.RLock()
 	defer cd.mu.RUnlock()
 
-	
-	if pressure.Coherence > 0.6 && len(cd.contextWords) > 0 {
-		
+	if pressure.PauliX > 0.6 && len(cd.contextWords) > 0 {
+
 		for _, contextWord := range cd.contextWords {
 			if synsetID, ok := cd.wordToSynset[contextWord]; ok {
-				
+
 				for word, sid := range cd.wordToSynset {
 					if sid == synsetID && word != contextWord {
-						
+
 						wordCoord := cd.EncodeWord(word)
 						dist := new(big.Int).Sub(coord, wordCoord)
 						dist.Abs(dist)
 
-						
-						threshold := big.NewInt(int64(1000 / (pressure.Coherence + 0.1)))
+						threshold := big.NewInt(int64(1000 / (pressure.PauliX + 0.1)))
 						if dist.Cmp(threshold) < 0 {
 							return word
 						}
@@ -302,13 +259,11 @@ func (cd *ContextDecoder) DecodeInContext(coord *big.Int, pressure PressureMetri
 		}
 	}
 
-	
 	return cd.DecodeWithEntanglement(coord, pressure)
 }
 
-
 func BuildDecoderFromNGAC(substrate *SubstrateChain, words []string, synonymGroups map[string][]string) *ContextDecoder {
-	
+
 	sortedWords := make([]string, len(words))
 	copy(sortedWords, words)
 	sort.Slice(sortedWords, func(i, j int) bool {
@@ -319,13 +274,11 @@ func BuildDecoderFromNGAC(substrate *SubstrateChain, words []string, synonymGrou
 	return NewContextDecoder(semantic)
 }
 
-
 func DecodeCoordinates(decoder *ContextDecoder, coords []*big.Int, pressure PressureMetrics, promptWords []string) []string {
 	if decoder == nil || len(coords) == 0 {
 		return nil
 	}
 
-	
 	decoder.SetContext(promptWords)
 
 	words := make([]string, 0, len(coords))
@@ -335,9 +288,8 @@ func DecodeCoordinates(decoder *ContextDecoder, coords []*big.Int, pressure Pres
 			words = append(words, word)
 		}
 
-		
-		pressure.Coherence *= 0.95
-		pressure.Tension *= 0.9
+		pressure.PauliX *= 0.95
+		pressure.PauliZ *= 0.9
 	}
 
 	return words

@@ -1,5 +1,3 @@
-
-
 package identity
 
 import (
@@ -13,102 +11,72 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-
 type Delegation struct {
-	
+
 	ID [32]byte `json:"id"`
 
-	
 	Delegator common.Address `json:"delegator"`
 
-	
 	Delegate common.Address `json:"delegate"`
 
-	
 	RightType RightType `json:"right_type"`
 
-	
 	StreamID [32]byte `json:"stream_id,omitempty"`
 
-	
 	Scope DelegationScope `json:"scope"`
 
-	
 	Depth int `json:"depth"`
 
-	
 	CurrentDepth int `json:"current_depth"`
 
-	
 	ParentDelegation [32]byte `json:"parent_delegation,omitempty"`
 
-	
 	Created int64 `json:"created"`
 
-	
 	ValidFrom int64 `json:"valid_from"`
 
-	
 	ValidUntil int64 `json:"valid_until,omitempty"`
 
-	
 	Policy DelegationPolicy `json:"policy"`
 
-	
 	Revoked bool `json:"revoked"`
 
-	
 	RevokedAt int64 `json:"revoked_at,omitempty"`
 
-	
 	RevokedBy common.Address `json:"revoked_by,omitempty"`
 
-	
 	Signature []byte `json:"signature"`
 }
 
-
 type DelegationScope struct {
-	
+
 	AllowedOperations []ConsentType `json:"allowed_operations"`
 
-	
 	ReadOnly bool `json:"read_only,omitempty"`
 
-	
 	LayerRestriction []LayerID `json:"layer_restriction,omitempty"`
 
-	
 	MaxDataSize int64 `json:"max_data_size,omitempty"`
 }
 
-
 type DelegationPolicy struct {
-	
+
 	RequireReason bool `json:"require_reason,omitempty"`
 
-	
 	NotifyDelegator bool `json:"notify_delegator,omitempty"`
 
-	
 	RateLimitPerHour int `json:"rate_limit_per_hour,omitempty"`
 
-	
 	RateLimitPerDay int `json:"rate_limit_per_day,omitempty"`
 
-	
 	AllowSubDelegation bool `json:"allow_sub_delegation,omitempty"`
 
-	
 	SubDelegationRequiresApproval bool `json:"sub_delegation_requires_approval,omitempty"`
 
-	
 	InheritPolicyToSubDelegates bool `json:"inherit_policy_to_sub_delegates,omitempty"`
 
-	
 	RevokeOnCompromise bool `json:"revoke_on_compromise,omitempty"`
 }
-
 
 func (d *Delegation) GenerateID() {
 	data, _ := json.Marshal(struct {
@@ -121,7 +89,6 @@ func (d *Delegation) GenerateID() {
 
 	d.ID = crypto.Keccak256Hash(data)
 }
-
 
 func (d *Delegation) Sign(privateKey *ecdsa.PrivateKey) error {
 	addr := crypto.PubkeyToAddress(privateKey.PublicKey)
@@ -145,7 +112,6 @@ func (d *Delegation) Sign(privateKey *ecdsa.PrivateKey) error {
 	return nil
 }
 
-
 func (d *Delegation) Verify() bool {
 	if len(d.Signature) == 0 {
 		return false
@@ -168,7 +134,6 @@ func (d *Delegation) Verify() bool {
 	return crypto.PubkeyToAddress(*pubKey) == d.Delegator
 }
 
-
 func (d *Delegation) IsValid() bool {
 	if d.Revoked {
 		return false
@@ -187,7 +152,6 @@ func (d *Delegation) IsValid() bool {
 	return d.Verify()
 }
 
-
 func (d *Delegation) CanSubDelegate() bool {
 	if !d.IsValid() {
 		return false
@@ -204,24 +168,22 @@ func (d *Delegation) CanSubDelegate() bool {
 	return true
 }
 
-
 func (d *Delegation) CreateSubDelegation(delegate common.Address, validUntil int64) (*Delegation, error) {
 	if !d.CanSubDelegate() {
 		return nil, fmt.Errorf("delegation does not allow sub-delegation")
 	}
 
-	
 	if d.ValidUntil > 0 && (validUntil == 0 || validUntil > d.ValidUntil) {
 		validUntil = d.ValidUntil
 	}
 
 	now := time.Now().Unix()
 	subDel := &Delegation{
-		Delegator:        d.Delegate, 
+		Delegator:        d.Delegate,
 		Delegate:         delegate,
 		RightType:        d.RightType,
 		StreamID:         d.StreamID,
-		Scope:            d.Scope, 
+		Scope:            d.Scope,
 		Depth:            d.Depth - 1,
 		CurrentDepth:     d.CurrentDepth + 1,
 		ParentDelegation: d.ID,
@@ -230,12 +192,11 @@ func (d *Delegation) CreateSubDelegation(delegate common.Address, validUntil int
 		ValidUntil:       validUntil,
 	}
 
-	
 	if d.Policy.InheritPolicyToSubDelegates {
 		subDel.Policy = d.Policy
 	} else {
 		subDel.Policy = DelegationPolicy{
-			AllowSubDelegation: d.Depth > 1, 
+			AllowSubDelegation: d.Depth > 1,
 		}
 	}
 
@@ -243,36 +204,27 @@ func (d *Delegation) CreateSubDelegation(delegate common.Address, validUntil int
 	return subDel, nil
 }
 
-
 func (d *Delegation) Revoke(revoker common.Address) {
 	d.Revoked = true
 	d.RevokedAt = time.Now().Unix()
 	d.RevokedBy = revoker
 }
 
-
 type DelegationManager struct {
 	mu sync.RWMutex
 
-	
 	Owner common.Address
 
-	
 	Delegations map[[32]byte]*Delegation
 
-	
 	DelegationsGiven map[common.Address][][32]byte
 
-	
 	DelegationsReceived map[common.Address][][32]byte
 
-	
 	DelegationChains map[[32]byte][][32]byte
 
-	
 	UsageTracking map[[32]byte]*UsageTracker
 }
-
 
 type UsageTracker struct {
 	HourlyUses  int
@@ -280,7 +232,6 @@ type UsageTracker struct {
 	HourlyReset int64
 	DailyReset  int64
 }
-
 
 func NewDelegationManager(owner common.Address) *DelegationManager {
 	return &DelegationManager{
@@ -292,7 +243,6 @@ func NewDelegationManager(owner common.Address) *DelegationManager {
 		UsageTracking:       make(map[[32]byte]*UsageTracker),
 	}
 }
-
 
 func (dm *DelegationManager) CreateDelegation(
 	privateKey *ecdsa.PrivateKey,
@@ -330,7 +280,6 @@ func (dm *DelegationManager) CreateDelegation(
 		return nil, err
 	}
 
-	
 	dm.Delegations[d.ID] = d
 	dm.DelegationsGiven[delegator] = append(dm.DelegationsGiven[delegator], d.ID)
 	dm.DelegationsReceived[delegate] = append(dm.DelegationsReceived[delegate], d.ID)
@@ -341,7 +290,6 @@ func (dm *DelegationManager) CreateDelegation(
 
 	return d, nil
 }
-
 
 func (dm *DelegationManager) CreateSubDelegation(
 	privateKey *ecdsa.PrivateKey,
@@ -357,24 +305,20 @@ func (dm *DelegationManager) CreateSubDelegation(
 		return nil, fmt.Errorf("parent delegation not found")
 	}
 
-	
 	caller := crypto.PubkeyToAddress(privateKey.PublicKey)
 	if caller != parent.Delegate {
 		return nil, fmt.Errorf("only the delegate can create sub-delegations")
 	}
 
-	
 	subDel, err := parent.CreateSubDelegation(newDelegate, validUntil)
 	if err != nil {
 		return nil, err
 	}
 
-	
 	if err := subDel.Sign(privateKey); err != nil {
 		return nil, err
 	}
 
-	
 	dm.Delegations[subDel.ID] = subDel
 	dm.DelegationsGiven[caller] = append(dm.DelegationsGiven[caller], subDel.ID)
 	dm.DelegationsReceived[newDelegate] = append(dm.DelegationsReceived[newDelegate], subDel.ID)
@@ -387,7 +331,6 @@ func (dm *DelegationManager) CreateSubDelegation(
 	return subDel, nil
 }
 
-
 func (dm *DelegationManager) RevokeDelegation(delegationID [32]byte, revoker common.Address) error {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
@@ -397,27 +340,23 @@ func (dm *DelegationManager) RevokeDelegation(delegationID [32]byte, revoker com
 		return fmt.Errorf("delegation not found")
 	}
 
-	
 	if !dm.canRevoke(d, revoker) {
 		return fmt.Errorf("not authorized to revoke this delegation")
 	}
 
-	
 	d.Revoke(revoker)
 
-	
 	dm.revokeSubDelegations(delegationID, revoker)
 
 	return nil
 }
 
 func (dm *DelegationManager) canRevoke(d *Delegation, revoker common.Address) bool {
-	
+
 	if d.Delegator == revoker {
 		return true
 	}
 
-	
 	if d.ParentDelegation != [32]byte{} {
 		parent, exists := dm.Delegations[d.ParentDelegation]
 		if exists {
@@ -438,7 +377,6 @@ func (dm *DelegationManager) revokeSubDelegations(parentID [32]byte, revoker com
 	}
 }
 
-
 func (dm *DelegationManager) CheckAndUse(delegationID [32]byte, operation ConsentType) error {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
@@ -452,7 +390,6 @@ func (dm *DelegationManager) CheckAndUse(delegationID [32]byte, operation Consen
 		return fmt.Errorf("delegation is not valid")
 	}
 
-	
 	allowed := false
 	for _, op := range d.Scope.AllowedOperations {
 		if op == operation {
@@ -464,11 +401,9 @@ func (dm *DelegationManager) CheckAndUse(delegationID [32]byte, operation Consen
 		return fmt.Errorf("operation %s not allowed by delegation scope", operation)
 	}
 
-	
 	tracker := dm.UsageTracking[delegationID]
 	now := time.Now().Unix()
 
-	
 	if now >= tracker.HourlyReset {
 		tracker.HourlyUses = 0
 		tracker.HourlyReset = now + 3600
@@ -478,7 +413,6 @@ func (dm *DelegationManager) CheckAndUse(delegationID [32]byte, operation Consen
 		tracker.DailyReset = now + 86400
 	}
 
-	
 	if d.Policy.RateLimitPerHour > 0 && tracker.HourlyUses >= d.Policy.RateLimitPerHour {
 		return fmt.Errorf("hourly rate limit exceeded")
 	}
@@ -486,13 +420,11 @@ func (dm *DelegationManager) CheckAndUse(delegationID [32]byte, operation Consen
 		return fmt.Errorf("daily rate limit exceeded")
 	}
 
-	
 	tracker.HourlyUses++
 	tracker.DailyUses++
 
 	return nil
 }
-
 
 func (dm *DelegationManager) GetDelegationsFor(delegate common.Address) []*Delegation {
 	dm.mu.RLock()
@@ -507,7 +439,6 @@ func (dm *DelegationManager) GetDelegationsFor(delegate common.Address) []*Deleg
 	return result
 }
 
-
 func (dm *DelegationManager) GetDelegationChain(delegationID [32]byte) []*Delegation {
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
@@ -520,13 +451,12 @@ func (dm *DelegationManager) GetDelegationChain(delegationID [32]byte) []*Delega
 		if !exists {
 			break
 		}
-		chain = append([]*Delegation{d}, chain...) 
+		chain = append([]*Delegation{d}, chain...)
 		currentID = d.ParentDelegation
 	}
 
 	return chain
 }
-
 
 func (dm *DelegationManager) VerifyDelegationChain(delegationID [32]byte) error {
 	chain := dm.GetDelegationChain(delegationID)
@@ -539,7 +469,6 @@ func (dm *DelegationManager) VerifyDelegationChain(delegationID [32]byte) error 
 			return fmt.Errorf("delegation at depth %d is invalid", i)
 		}
 
-		
 		if i > 0 {
 			parent := chain[i-1]
 			if d.ParentDelegation != parent.ID {
@@ -553,7 +482,6 @@ func (dm *DelegationManager) VerifyDelegationChain(delegationID [32]byte) error 
 
 	return nil
 }
-
 
 func (dm *DelegationManager) ExportDelegations() ([]byte, error) {
 	dm.mu.RLock()

@@ -1,5 +1,3 @@
-
-
 package identity
 
 import (
@@ -14,58 +12,48 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-
 type DerivationConfig struct {
-	
-	Time    uint32 
-	Memory  uint32 
-	Threads uint8  
 
-	
+	Time    uint32
+	Memory  uint32
+	Threads uint8
+
 	Domain string
 }
 
-
 func DefaultDerivationConfig() DerivationConfig {
 	return DerivationConfig{
-		Time:    3,           
-		Memory:  256 * 1024,  
-		Threads: 4,           
-		Domain:  "ZEAM_IDENTITY_V1",
-	}
-}
-
-
-func LightDerivationConfig() DerivationConfig {
-	return DerivationConfig{
-		Time:    1,
-		Memory:  64 * 1024, 
+		Time:    3,
+		Memory:  256 * 1024,
 		Threads: 4,
 		Domain:  "ZEAM_IDENTITY_V1",
 	}
 }
 
+func LightDerivationConfig() DerivationConfig {
+	return DerivationConfig{
+		Time:    1,
+		Memory:  64 * 1024,
+		Threads: 4,
+		Domain:  "ZEAM_IDENTITY_V1",
+	}
+}
 
 type StatelessIdentity struct {
 	mu sync.RWMutex
 
-	
 	privateKey *ecdsa.PrivateKey
 	address    common.Address
 	forkID     [32]byte
 
-	
 	chainSalt   []byte
 	attestation []byte
 
-	
 	derivedAt time.Time
 	expiresAt time.Time
 
-	
 	gate HardwareGate
 }
-
 
 func DeriveIdentity(
 	userSecret []byte,
@@ -80,11 +68,9 @@ func DeriveIdentity(
 		return nil, fmt.Errorf("chain salt too short (minimum 16 bytes)")
 	}
 
-	
 	var attestation []byte
 	if gate != nil && gate.Available() && gate.Type() != GateTypeSoftware && gate.Type() != GateTypeNone {
-		
-		
+
 		nonce := make([]byte, 16)
 		if _, err := rand.Read(nonce); err != nil {
 			return nil, fmt.Errorf("failed to generate nonce: %w", err)
@@ -98,57 +84,48 @@ func DeriveIdentity(
 			return nil, fmt.Errorf("hardware attestation failed: %w", err)
 		}
 	} else {
-		
-		
+
 		attestation = []byte{}
 		if gate == nil {
 			gate = NewNoGate()
 		}
 	}
 
-	
 	combined := make([]byte, 0, len(userSecret)+len(chainSalt)+len(attestation))
 	combined = append(combined, userSecret...)
 	combined = append(combined, chainSalt...)
 	combined = append(combined, attestation...)
 
-	
 	salt := crypto.Keccak256([]byte(config.Domain))
 
-	
 	seed := argon2.IDKey(
 		combined,
 		salt,
 		config.Time,
 		config.Memory,
 		config.Threads,
-		32, 
+		32,
 	)
 
-	
 	for i := range combined {
 		combined[i] = 0
 	}
 
-	
 	privateKey, err := crypto.ToECDSA(seed)
 	if err != nil {
-		
+
 		for i := range seed {
 			seed[i] = 0
 		}
 		return nil, fmt.Errorf("failed to derive private key: %w", err)
 	}
 
-	
 	for i := range seed {
 		seed[i] = 0
 	}
 
-	
 	address := crypto.PubkeyToAddress(privateKey.PublicKey)
 
-	
 	forkIDData := append(chainSalt, address.Bytes()...)
 	forkID := crypto.Keccak256Hash(forkIDData)
 
@@ -160,13 +137,12 @@ func DeriveIdentity(
 		chainSalt:   chainSalt,
 		attestation: attestation,
 		derivedAt:   now,
-		expiresAt:   now.Add(24 * time.Hour), 
+		expiresAt:   now.Add(24 * time.Hour),
 		gate:        gate,
 	}
 
 	return identity, nil
 }
-
 
 func (si *StatelessIdentity) Address() common.Address {
 	si.mu.RLock()
@@ -174,20 +150,17 @@ func (si *StatelessIdentity) Address() common.Address {
 	return si.address
 }
 
-
 func (si *StatelessIdentity) ForkID() [32]byte {
 	si.mu.RLock()
 	defer si.mu.RUnlock()
 	return si.forkID
 }
 
-
 func (si *StatelessIdentity) ShortID() string {
 	si.mu.RLock()
 	defer si.mu.RUnlock()
 	return fmt.Sprintf("%x...%x", si.forkID[:4], si.forkID[28:])
 }
-
 
 func (si *StatelessIdentity) IsValid() bool {
 	si.mu.RLock()
@@ -201,7 +174,6 @@ func (si *StatelessIdentity) IsValid() bool {
 	}
 	return true
 }
-
 
 func (si *StatelessIdentity) Sign(hash []byte) ([]byte, error) {
 	si.mu.RLock()
@@ -217,36 +189,31 @@ func (si *StatelessIdentity) Sign(hash []byte) ([]byte, error) {
 	return crypto.Sign(hash, si.privateKey)
 }
 
-
 func (si *StatelessIdentity) SignTransaction(txHash []byte) ([]byte, error) {
 	return si.Sign(txHash)
 }
-
 
 func (si *StatelessIdentity) Lock() {
 	si.mu.Lock()
 	defer si.mu.Unlock()
 
 	if si.privateKey != nil {
-		
+
 		si.privateKey.D.SetInt64(0)
 		si.privateKey = nil
 	}
 
-	
 	for i := range si.attestation {
 		si.attestation[i] = 0
 	}
 	si.attestation = nil
 }
 
-
 func (si *StatelessIdentity) ExtendSession(duration time.Duration) {
 	si.mu.Lock()
 	defer si.mu.Unlock()
 	si.expiresAt = time.Now().Add(duration)
 }
-
 
 func (si *StatelessIdentity) GateType() GateType {
 	si.mu.RLock()
@@ -257,20 +224,17 @@ func (si *StatelessIdentity) GateType() GateType {
 	return si.gate.Type()
 }
 
-
 func (si *StatelessIdentity) DerivedAt() time.Time {
 	si.mu.RLock()
 	defer si.mu.RUnlock()
 	return si.derivedAt
 }
 
-
 func (si *StatelessIdentity) ExpiresAt() time.Time {
 	si.mu.RLock()
 	defer si.mu.RUnlock()
 	return si.expiresAt
 }
-
 
 func (si *StatelessIdentity) ChainSalt() []byte {
 	si.mu.RLock()
@@ -280,7 +244,6 @@ func (si *StatelessIdentity) ChainSalt() []byte {
 	return result
 }
 
-
 func GenerateChainSalt() ([]byte, error) {
 	salt := make([]byte, 32)
 	if _, err := rand.Read(salt); err != nil {
@@ -289,7 +252,6 @@ func GenerateChainSalt() ([]byte, error) {
 	return salt, nil
 }
 
-
 func ChainSaltFromBlockHash(blockHash []byte, randomCommitment []byte) []byte {
 	data := make([]byte, 0, len(blockHash)+len(randomCommitment)+len("ZEAM_CHAIN_SALT_V1"))
 	data = append(data, []byte("ZEAM_CHAIN_SALT_V1")...)
@@ -297,7 +259,6 @@ func ChainSaltFromBlockHash(blockHash []byte, randomCommitment []byte) []byte {
 	data = append(data, randomCommitment...)
 	return crypto.Keccak256(data)
 }
-
 
 func VerifyIdentity(
 	userSecret []byte,
@@ -315,7 +276,6 @@ func VerifyIdentity(
 	return identity.Address() == expectedAddress, nil
 }
 
-
 type SessionManager struct {
 	mu sync.RWMutex
 
@@ -326,24 +286,21 @@ type SessionManager struct {
 	config      DerivationConfig
 }
 
-
 func NewSessionManager(gate HardwareGate, config DerivationConfig) *SessionManager {
 	if gate == nil {
 		gate = DetectHardwareGate()
 	}
 	return &SessionManager{
-		lockTimeout: 15 * time.Minute, 
+		lockTimeout: 15 * time.Minute,
 		gate:        gate,
 		config:      config,
 	}
 }
 
-
 func (sm *SessionManager) Unlock(userSecret, chainSalt []byte) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	
 	if sm.current != nil {
 		sm.current.Lock()
 	}
@@ -359,7 +316,6 @@ func (sm *SessionManager) Unlock(userSecret, chainSalt []byte) error {
 	return nil
 }
 
-
 func (sm *SessionManager) Lock() {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -370,7 +326,6 @@ func (sm *SessionManager) Lock() {
 	}
 }
 
-
 func (sm *SessionManager) Current() *StatelessIdentity {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
@@ -379,9 +334,8 @@ func (sm *SessionManager) Current() *StatelessIdentity {
 		return nil
 	}
 
-	
 	if time.Now().After(sm.autoLockAt) {
-		
+
 		sm.mu.RUnlock()
 		sm.Lock()
 		sm.mu.RLock()
@@ -395,13 +349,11 @@ func (sm *SessionManager) Current() *StatelessIdentity {
 	return sm.current
 }
 
-
 func (sm *SessionManager) Touch() {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.autoLockAt = time.Now().Add(sm.lockTimeout)
 }
-
 
 func (sm *SessionManager) SetLockTimeout(d time.Duration) {
 	sm.mu.Lock()
@@ -409,7 +361,6 @@ func (sm *SessionManager) SetLockTimeout(d time.Duration) {
 	sm.lockTimeout = d
 	sm.autoLockAt = time.Now().Add(d)
 }
-
 
 func (sm *SessionManager) IsUnlocked() bool {
 	return sm.Current() != nil

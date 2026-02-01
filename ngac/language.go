@@ -1,5 +1,3 @@
-
-
 package ngac
 
 import (
@@ -11,17 +9,15 @@ import (
 	"zeam/quantum"
 )
 
-
 type Language struct {
 	Name         string
-	Alphabet     map[rune]*big.Int         
-	sortedRunes  []rune                    
-	Grammar      map[string]GrammarRule    
-	Automata     *SyntaxAutomata           
-	Phonotactics *Phonotactics             
-	Morphology   map[string]MorphologyRule 
+	Alphabet     map[rune]*big.Int
+	sortedRunes  []rune
+	Grammar      map[string]GrammarRule
+	Automata     *SyntaxAutomata
+	Phonotactics *Phonotactics
+	Morphology   map[string]MorphologyRule
 }
-
 
 type GrammarRule struct {
 	Name      string
@@ -29,31 +25,26 @@ type GrammarRule struct {
 	Arity     int
 }
 
-
 type SyntaxAutomata struct {
 	States       map[string]*State
 	CurrentState string
 }
 
-
 type State struct {
 	Name        string
-	Transitions map[string]string 
+	Transitions map[string]string
 	IsFinal     bool
 }
 
-
 type MorphologyRule func(*quantum.SubstrateChain, *big.Int) *big.Int
 
-
 type Phonotactics struct {
-	ValidOnsets      map[string]bool 
-	ValidCodas       map[string]bool 
-	Vowels           map[rune]bool   
-	Consonants       map[rune]bool   
-	ForbiddenBigrams map[string]bool 
+	ValidOnsets      map[string]bool
+	ValidCodas       map[string]bool
+	Vowels           map[rune]bool
+	Consonants       map[rune]bool
+	ForbiddenBigrams map[string]bool
 }
-
 
 func NewEnglishLanguage(sc *quantum.SubstrateChain) *Language {
 	lang := &Language{
@@ -64,37 +55,35 @@ func NewEnglishLanguage(sc *quantum.SubstrateChain) *Language {
 	}
 
 	lang.buildAlphabet(sc)
-	lang.indexAlphabet()  
-	lang.buildGrammar(sc) 
+	lang.indexAlphabet()
+	lang.buildGrammar(sc)
 	lang.Automata = lang.buildAutomata()
 	lang.Phonotactics = NewEnglishPhonotactics()
-	lang.buildMorphology(sc) 
+	lang.buildMorphology(sc)
 
 	return lang
 }
 
-
 func (l *Language) buildAlphabet(sc *quantum.SubstrateChain) {
-	
+
 	for ch := 'a'; ch <= 'z'; ch++ {
 		l.Alphabet[ch] = quantum.UTF8_ENCODE(sc, string(ch))
 	}
-	
+
 	for ch := 'A'; ch <= 'Z'; ch++ {
 		lower := ch + 32
 		l.Alphabet[ch] = l.Alphabet[rune(lower)]
 	}
-	
+
 	for ch := '0'; ch <= '9'; ch++ {
 		l.Alphabet[ch] = quantum.UTF8_ENCODE(sc, string(ch))
 	}
-	
+
 	syms := []rune{' ', '.', '?', '!', ',', '-', '\'', ';', ':'}
 	for _, ch := range syms {
 		l.Alphabet[ch] = quantum.UTF8_ENCODE(sc, string(ch))
 	}
 }
-
 
 func (l *Language) indexAlphabet() {
 	l.sortedRunes = make([]rune, 0, len(l.Alphabet))
@@ -104,9 +93,8 @@ func (l *Language) indexAlphabet() {
 	sort.Slice(l.sortedRunes, func(i, j int) bool { return l.sortedRunes[i] < l.sortedRunes[j] })
 }
 
-
 func (l *Language) buildGrammar(sc *quantum.SubstrateChain) {
-	
+
 	l.Grammar["noun_phrase"] = GrammarRule{
 		Name:  "noun_phrase",
 		Arity: 2,
@@ -122,7 +110,6 @@ func (l *Language) buildGrammar(sc *quantum.SubstrateChain) {
 		},
 	}
 
-	
 	l.Grammar["verb_phrase"] = GrammarRule{
 		Name:  "verb_phrase",
 		Arity: 2,
@@ -138,7 +125,6 @@ func (l *Language) buildGrammar(sc *quantum.SubstrateChain) {
 		},
 	}
 
-	
 	l.Grammar["sentence"] = GrammarRule{
 		Name:  "sentence",
 		Arity: 2,
@@ -154,7 +140,6 @@ func (l *Language) buildGrammar(sc *quantum.SubstrateChain) {
 		},
 	}
 }
-
 
 func (l *Language) buildAutomata() *SyntaxAutomata {
 	automata := &SyntaxAutomata{
@@ -185,7 +170,6 @@ func (l *Language) buildAutomata() *SyntaxAutomata {
 	return automata
 }
 
-
 func NewEnglishPhonotactics() *Phonotactics {
 	p := &Phonotactics{
 		ValidOnsets:      make(map[string]bool),
@@ -195,11 +179,10 @@ func NewEnglishPhonotactics() *Phonotactics {
 		ForbiddenBigrams: make(map[string]bool),
 	}
 
-	
 	for _, v := range []rune{'a', 'e', 'i', 'o', 'u'} {
 		p.Vowels[v] = true
 	}
-	
+
 	for _, c := range []rune{
 		'b', 'c', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'm',
 		'n', 'p', 'q', 'r', 's', 't', 'v', 'w', 'x', 'y', 'z',
@@ -207,7 +190,6 @@ func NewEnglishPhonotactics() *Phonotactics {
 		p.Consonants[c] = true
 	}
 
-	
 	onsets := []string{
 		"",
 		"b", "c", "d", "f", "g", "h", "j", "k", "l", "m", "n", "p", "r", "s", "t", "v", "w", "y", "z",
@@ -219,7 +201,6 @@ func NewEnglishPhonotactics() *Phonotactics {
 		p.ValidOnsets[o] = true
 	}
 
-	
 	codas := []string{
 		"",
 		"b", "d", "f", "g", "k", "l", "m", "n", "p", "r", "s", "t", "v", "x", "z",
@@ -230,7 +211,6 @@ func NewEnglishPhonotactics() *Phonotactics {
 		p.ValidCodas[c] = true
 	}
 
-	
 	for _, seq := range []string{"tl", "dl", "sr", "vl", "bz", "dg", "gk"} {
 		p.ForbiddenBigrams[seq] = true
 	}
@@ -238,16 +218,15 @@ func NewEnglishPhonotactics() *Phonotactics {
 	return p
 }
 
-
 func (l *Language) buildMorphology(sc *quantum.SubstrateChain) {
-	
+
 	l.Morphology["pluralize"] = func(sc *quantum.SubstrateChain, coord *big.Int) *big.Int {
 		sCoord := l.Alphabet['s']
 		res := new(big.Int).Lsh(new(big.Int).Set(coord), 8)
 		res.Add(res, sCoord)
 		return res
 	}
-	
+
 	l.Morphology["past_tense"] = func(sc *quantum.SubstrateChain, coord *big.Int) *big.Int {
 		ed := quantum.UTF8_ENCODE(sc, "ed")
 		res := new(big.Int).Lsh(new(big.Int).Set(coord), 16)
@@ -256,13 +235,11 @@ func (l *Language) buildMorphology(sc *quantum.SubstrateChain) {
 	}
 }
 
-
 func (p *Phonotactics) IsValidSequence(letters []rune) bool {
 	if len(letters) == 0 {
 		return false
 	}
 
-	
 	hasV := false
 	for _, ch := range letters {
 		if p.Vowels[ch] {
@@ -274,7 +251,6 @@ func (p *Phonotactics) IsValidSequence(letters []rune) bool {
 		return false
 	}
 
-	
 	onset := p.extractOnset(letters)
 	if !p.ValidOnsets[onset] {
 		return false
@@ -284,7 +260,6 @@ func (p *Phonotactics) IsValidSequence(letters []rune) bool {
 		return false
 	}
 
-	
 	for i := 0; i < len(letters)-1; i++ {
 		bg := string([]rune{letters[i], letters[i+1]})
 		if p.ForbiddenBigrams[bg] {
@@ -293,7 +268,6 @@ func (p *Phonotactics) IsValidSequence(letters []rune) bool {
 	}
 	return true
 }
-
 
 func (p *Phonotactics) extractOnset(letters []rune) string {
 	onset := strings.Builder{}
@@ -307,7 +281,6 @@ func (p *Phonotactics) extractOnset(letters []rune) string {
 	return onset.String()
 }
 
-
 func (p *Phonotactics) extractCoda(letters []rune) string {
 	coda := ""
 	for i := len(letters) - 1; i >= 0; i-- {
@@ -320,14 +293,12 @@ func (p *Phonotactics) extractCoda(letters []rune) string {
 	return coda
 }
 
-
 func (l *Language) pickRune(seed *big.Int, step int, retry int) rune {
-	idxBig := new(big.Int).Add(seed, big.NewInt(int64(step*17+retry))) 
+	idxBig := new(big.Int).Add(seed, big.NewInt(int64(step*17+retry)))
 	hashed := quantum.FeistelHash(idxBig)
 	i := new(big.Int).Mod(hashed, big.NewInt(int64(len(l.sortedRunes)))).Int64()
 	return l.sortedRunes[i]
 }
-
 
 func (p *Phonotactics) GenerateValidWord(sc *quantum.SubstrateChain, lang *Language, seed *big.Int, maxLen int) string {
 	if maxLen < 3 {
@@ -337,7 +308,6 @@ func (p *Phonotactics) GenerateValidWord(sc *quantum.SubstrateChain, lang *Langu
 		maxLen = 12
 	}
 
-	
 	skeleton := make([]byte, 0, maxLen)
 	parity := new(big.Int).And(seed, big.NewInt(1)).Cmp(big.NewInt(0)) == 0
 	for i := 0; i < maxLen; i++ {
@@ -362,11 +332,10 @@ func (p *Phonotactics) GenerateValidWord(sc *quantum.SubstrateChain, lang *Langu
 	for step := 0; step < maxLen; step++ {
 		want := skeleton[step]
 		chosen := rune(0)
-		
+
 		for retry := 0; retry < 6; retry++ {
 			r := lang.pickRune(curSeed, step, retry)
 
-			
 			if want == 'V' && !p.Vowels[r] {
 				continue
 			}
@@ -376,7 +345,6 @@ func (p *Phonotactics) GenerateValidWord(sc *quantum.SubstrateChain, lang *Langu
 
 			test := append(append([]rune{}, letters...), r)
 
-			
 			if !p.IsValidSequence(test) {
 				continue
 			}
@@ -385,24 +353,22 @@ func (p *Phonotactics) GenerateValidWord(sc *quantum.SubstrateChain, lang *Langu
 			break
 		}
 		if chosen == 0 {
-			
+
 			if len(letters) >= 3 {
 				break
 			}
-			
+
 			curSeed = quantum.FeistelHash(curSeed)
 			continue
 		}
 		letters = append(letters, chosen)
 	}
 
-	
 	if len(letters) < 3 || !p.IsValidSequence(letters) {
 		return ""
 	}
 	return string(letters)
 }
-
 
 func (a *SyntaxAutomata) Transition(symbol string) bool {
 	st := a.States[a.CurrentState]
@@ -416,11 +382,9 @@ func (a *SyntaxAutomata) Transition(symbol string) bool {
 	return false
 }
 
-
 func (a *SyntaxAutomata) IsValid() bool {
 	return a.CurrentState != "" && a.States[a.CurrentState] != nil
 }
-
 
 func (a *SyntaxAutomata) IsFinal() bool {
 	if st, ok := a.States[a.CurrentState]; ok {
@@ -429,11 +393,9 @@ func (a *SyntaxAutomata) IsFinal() bool {
 	return false
 }
 
-
 func (a *SyntaxAutomata) Reset() {
 	a.CurrentState = "START"
 }
-
 
 func (a *SyntaxAutomata) GetValidTypes() []string {
 	st := a.States[a.CurrentState]
@@ -448,7 +410,6 @@ func (a *SyntaxAutomata) GetValidTypes() []string {
 	return out
 }
 
-
 func Amp(sc *quantum.SubstrateChain, coord *big.Int) float64 {
 	if sc == nil || coord == nil {
 		return 0
@@ -456,7 +417,6 @@ func Amp(sc *quantum.SubstrateChain, coord *big.Int) float64 {
 	a := sc.GetAmplitude(coord)
 	return cmplx.Abs(a)
 }
-
 
 var UTTERANCE_PHONOTACTIC quantum.QuantumCircuit = func(sc *quantum.SubstrateChain, inputs ...*big.Int) *big.Int {
 	if len(inputs) == 0 {
@@ -474,17 +434,16 @@ var UTTERANCE_PHONOTACTIC quantum.QuantumCircuit = func(sc *quantum.SubstrateCha
 	for len(words) < maxWords {
 		w := lang.Phonotactics.GenerateValidWord(sc, lang, cur, 6)
 		if w == "" {
-			
+
 			cur = quantum.FeistelHash(cur)
 			continue
 		}
 		if lang.Automata.Transition("WORD") {
 			words = append(words, w)
 		}
-		
+
 		cur = quantum.FeistelHash(cur)
 
-		
 		if new(big.Int).Mod(cur, big.NewInt(3)).Int64() == 0 && len(words) >= 2 {
 			if lang.Automata.Transition("END") && lang.Automata.IsFinal() {
 				break

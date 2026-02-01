@@ -1,0 +1,10 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for ZEAM",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "shell:allow-execute"
+  ]
+}

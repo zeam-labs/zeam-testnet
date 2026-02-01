@@ -2,21 +2,20 @@ package quantum
 
 import (
 	"math"
+	"sort"
 	"time"
 )
 
-
 type ResonanceResult struct {
 	Location BlockLocation
-	Strength float64     
-	Count    int         
-	Block    *Block      
-	Data     interface{} 
+	Strength float64
+	Count    int
+	Block    *Block
+	Data     interface{}
 }
 
-
 func FindResonance(chains map[string]*Chain) *ResonanceResult {
-	
+
 	blockCount := make(map[BlockLocation]int)
 	blockPhase := make(map[BlockLocation][]float64)
 
@@ -31,25 +30,22 @@ func FindResonance(chains map[string]*Chain) *ResonanceResult {
 
 		blockCount[loc]++
 
-		
 		freq := GetChainFrequency(chainID)
 		phase := math.Sin(elapsed * freq * 2 * math.Pi)
 		blockPhase[loc] = append(blockPhase[loc], phase)
 	}
 
-	
 	var bestLoc BlockLocation
 	bestStrength := 0.0
 	bestCount := 0
 
 	for loc, count := range blockCount {
-		
+
 		phaseSum := 0.0
 		for _, p := range blockPhase[loc] {
 			phaseSum += p
 		}
 
-		
 		strength := float64(count) * math.Abs(phaseSum)
 
 		if strength > bestStrength {
@@ -59,12 +55,10 @@ func FindResonance(chains map[string]*Chain) *ResonanceResult {
 		}
 	}
 
-	
 	if bestCount == 0 {
 		return nil
 	}
 
-	
 	chain, exists := chains[bestLoc.ChainID]
 	if !exists {
 		return nil
@@ -83,9 +77,8 @@ func FindResonance(chains map[string]*Chain) *ResonanceResult {
 	}
 }
 
-
 func FindTopResonances(chains map[string]*Chain, n int) []*ResonanceResult {
-	
+
 	blockCount := make(map[BlockLocation]int)
 	blockPhase := make(map[BlockLocation][]float64)
 
@@ -105,14 +98,13 @@ func FindTopResonances(chains map[string]*Chain, n int) []*ResonanceResult {
 		blockPhase[loc] = append(blockPhase[loc], phase)
 	}
 
-	
 	type candidate struct {
 		loc      BlockLocation
 		strength float64
 		count    int
 	}
 
-	var candidates []candidate
+	candidates := make([]candidate, 0, len(blockCount))
 	for loc, count := range blockCount {
 		phaseSum := 0.0
 		for _, p := range blockPhase[loc] {
@@ -127,16 +119,10 @@ func FindTopResonances(chains map[string]*Chain, n int) []*ResonanceResult {
 		})
 	}
 
-	
-	for i := 0; i < len(candidates); i++ {
-		for j := i + 1; j < len(candidates); j++ {
-			if candidates[j].strength > candidates[i].strength {
-				candidates[i], candidates[j] = candidates[j], candidates[i]
-			}
-		}
-	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].strength > candidates[j].strength
+	})
 
-	
 	if n > len(candidates) {
 		n = len(candidates)
 	}
@@ -165,7 +151,6 @@ func FindTopResonances(chains map[string]*Chain, n int) []*ResonanceResult {
 	return results
 }
 
-
 func MeasurePhaseCoherence(chains map[string]*Chain) float64 {
 	origin := GetWaveOrigin()
 	elapsed := time.Since(origin.PushTime).Seconds()
@@ -181,7 +166,6 @@ func MeasurePhaseCoherence(chains map[string]*Chain) float64 {
 		return 0
 	}
 
-	
 	sumCos := 0.0
 	sumSin := 0.0
 	for _, p := range phases {
@@ -189,7 +173,6 @@ func MeasurePhaseCoherence(chains map[string]*Chain) float64 {
 		sumSin += math.Sin(p)
 	}
 
-	
 	coherence := math.Sqrt(sumCos*sumCos+sumSin*sumSin) / float64(len(phases))
 	return coherence
 }

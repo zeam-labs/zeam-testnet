@@ -1,5 +1,3 @@
-
-
 package identity
 
 import (
@@ -16,134 +14,101 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-
 type ProofType string
 
 const (
-	
+
 	ProofExistence ProofType = "existence"
-	
+
 	ProofRange ProofType = "range"
-	
+
 	ProofMembership ProofType = "membership"
-	
+
 	ProofEquality ProofType = "equality"
-	
+
 	ProofComposite ProofType = "composite"
-	
+
 	ProofPredicate ProofType = "predicate"
 )
 
-
 type SelectiveDisclosureProof struct {
-	
+
 	ID [32]byte `json:"id"`
 
-	
 	Type ProofType `json:"type"`
 
-	
 	Prover common.Address `json:"prover"`
 
-	
 	StreamID [32]byte `json:"stream_id"`
 
-	
 	Commitment []byte `json:"commitment"`
 
-	
 	Claim string `json:"claim"`
 
-	
 	ProofData []byte `json:"proof_data"`
 
-	
 	Created int64 `json:"created"`
 
-	
 	ValidUntil int64 `json:"valid_until,omitempty"`
 
-	
 	Revocable bool `json:"revocable"`
 
-	
 	Revoked bool `json:"revoked"`
 
-	
 	RevokedAt int64 `json:"revoked_at,omitempty"`
 
-	
 	Nonce []byte `json:"nonce"`
 
-	
 	Signature []byte `json:"signature"`
 }
 
-
 type RangeProofData struct {
-	
+
 	Min *big.Int `json:"min"`
 
-	
 	Max *big.Int `json:"max"`
 
-	
 	ValueCommitment []byte `json:"value_commitment"`
 	RangeCommitment []byte `json:"range_commitment"`
 
-	
 	Challenge []byte `json:"challenge"`
 	Response  []byte `json:"response"`
 }
 
-
 type MembershipProofData struct {
-	
+
 	SetCommitment []byte `json:"set_commitment"`
 
-	
 	MerkleRoot []byte `json:"merkle_root"`
 
-	
 	MerklePath [][]byte `json:"merkle_path"`
 
-	
 	PathIndices []bool `json:"path_indices"`
 
-	
 	LeafCommitment []byte `json:"leaf_commitment"`
 }
 
-
 type PredicateProofData struct {
-	
+
 	Predicate string `json:"predicate"`
 
-	
 	InputCommitments [][]byte `json:"input_commitments"`
 
-	
 	OutputCommitment []byte `json:"output_commitment"`
 
-	
 	CircuitProof []byte `json:"circuit_proof"`
 }
 
-
 type CompositeProofData struct {
-	
+
 	SubProofs [][32]byte `json:"sub_proofs"`
 
-	
 	Operator string `json:"operator"`
 
-	
 	Threshold int `json:"threshold,omitempty"`
 
-	
 	BindingProof []byte `json:"binding_proof"`
 }
-
 
 func (sdp *SelectiveDisclosureProof) GenerateID() {
 	data, _ := json.Marshal(struct {
@@ -157,7 +122,6 @@ func (sdp *SelectiveDisclosureProof) GenerateID() {
 
 	sdp.ID = crypto.Keccak256Hash(data)
 }
-
 
 func (sdp *SelectiveDisclosureProof) Sign(privateKey *ecdsa.PrivateKey) error {
 	addr := crypto.PubkeyToAddress(privateKey.PublicKey)
@@ -181,7 +145,6 @@ func (sdp *SelectiveDisclosureProof) Sign(privateKey *ecdsa.PrivateKey) error {
 	return nil
 }
 
-
 func (sdp *SelectiveDisclosureProof) Verify() bool {
 	if len(sdp.Signature) == 0 {
 		return false
@@ -204,7 +167,6 @@ func (sdp *SelectiveDisclosureProof) Verify() bool {
 	return crypto.PubkeyToAddress(*pubKey) == sdp.Prover
 }
 
-
 func (sdp *SelectiveDisclosureProof) IsValid() bool {
 	if sdp.Revoked {
 		return false
@@ -218,21 +180,18 @@ func (sdp *SelectiveDisclosureProof) IsValid() bool {
 	return sdp.Verify()
 }
 
-
 func (sdp *SelectiveDisclosureProof) Revoke() {
 	sdp.Revoked = true
 	sdp.RevokedAt = time.Now().Unix()
 }
 
-
 func CreateCommitment(value []byte, blinding []byte) []byte {
-	
+
 	h := sha256.New()
 	h.Write(value)
 	h.Write(blinding)
 	return h.Sum(nil)
 }
-
 
 func VerifyCommitment(commitment, value, blinding []byte) bool {
 	expected := CreateCommitment(value, blinding)
@@ -247,7 +206,6 @@ func VerifyCommitment(commitment, value, blinding []byte) bool {
 	return true
 }
 
-
 func CreateExistenceProof(
 	privateKey *ecdsa.PrivateKey,
 	streamID [32]byte,
@@ -256,11 +214,9 @@ func CreateExistenceProof(
 ) (*SelectiveDisclosureProof, []byte, error) {
 	prover := crypto.PubkeyToAddress(privateKey.PublicKey)
 
-	
 	blinding := make([]byte, 32)
 	copy(blinding, crypto.Keccak256(data, []byte("blinding"))[:32])
 
-	
 	commitment := CreateCommitment(data, blinding)
 
 	now := time.Now().Unix()
@@ -272,7 +228,7 @@ func CreateExistenceProof(
 		StreamID:   streamID,
 		Commitment: commitment,
 		Claim:      "data_exists",
-		ProofData:  nil, 
+		ProofData:  nil,
 		Created:    now,
 		ValidUntil: validUntil,
 		Revocable:  true,
@@ -287,7 +243,6 @@ func CreateExistenceProof(
 	return proof, blinding, nil
 }
 
-
 func CreateRangeProof(
 	privateKey *ecdsa.PrivateKey,
 	streamID [32]byte,
@@ -298,24 +253,19 @@ func CreateRangeProof(
 ) (*SelectiveDisclosureProof, error) {
 	prover := crypto.PubkeyToAddress(privateKey.PublicKey)
 
-	
 	if value.Cmp(min) < 0 || value.Cmp(max) > 0 {
 		return nil, fmt.Errorf("value is not in range [%s, %s]", min.String(), max.String())
 	}
 
-	
 	valueBytes := value.Bytes()
 	blinding := crypto.Keccak256(valueBytes, []byte("range_blinding"))[:32]
 	valueCommitment := CreateCommitment(valueBytes, blinding)
 
-	
 	rangeData := append(min.Bytes(), max.Bytes()...)
 	rangeCommitment := CreateCommitment(rangeData, blinding)
 
-	
 	challenge := crypto.Keccak256(valueCommitment, rangeCommitment)
 
-	
 	response := crypto.Keccak256(challenge, blinding)
 
 	rangeProofData := RangeProofData{
@@ -353,7 +303,6 @@ func CreateRangeProof(
 	return proof, nil
 }
 
-
 func CreateMembershipProof(
 	privateKey *ecdsa.PrivateKey,
 	streamID [32]byte,
@@ -364,7 +313,6 @@ func CreateMembershipProof(
 ) (*SelectiveDisclosureProof, error) {
 	prover := crypto.PubkeyToAddress(privateKey.PublicKey)
 
-	
 	elementIndex := -1
 	for i, e := range set {
 		if string(e) == string(element) {
@@ -376,16 +324,13 @@ func CreateMembershipProof(
 		return nil, fmt.Errorf("element not in set")
 	}
 
-	
 	leaves := make([][]byte, len(set))
 	for i, e := range set {
 		leaves[i] = crypto.Keccak256(e)
 	}
 
-	
 	root, path, pathIndices := computeMerkleProof(leaves, elementIndex)
 
-	
 	blinding := crypto.Keccak256(element, []byte("membership_blinding"))[:32]
 	leafCommitment := CreateCommitment(element, blinding)
 	setCommitment := CreateCommitment(root, blinding)
@@ -424,13 +369,11 @@ func CreateMembershipProof(
 	return proof, nil
 }
 
-
 func computeMerkleProof(leaves [][]byte, index int) ([]byte, [][]byte, []bool) {
 	if len(leaves) == 0 {
 		return nil, nil, nil
 	}
 
-	
 	n := 1
 	for n < len(leaves) {
 		n *= 2
@@ -455,10 +398,10 @@ func computeMerkleProof(leaves [][]byte, index int) ([]byte, [][]byte, []bool) {
 			if i == currentIndex || i+1 == currentIndex {
 				if currentIndex%2 == 0 {
 					path = append(path, right)
-					pathIndices = append(pathIndices, true) 
+					pathIndices = append(pathIndices, true)
 				} else {
 					path = append(path, left)
-					pathIndices = append(pathIndices, false) 
+					pathIndices = append(pathIndices, false)
 				}
 			}
 
@@ -473,15 +416,14 @@ func computeMerkleProof(leaves [][]byte, index int) ([]byte, [][]byte, []bool) {
 	return currentLevel[0], path, pathIndices
 }
 
-
 func VerifyMerkleProof(leaf, root []byte, path [][]byte, pathIndices []bool) bool {
 	current := leaf
 	for i, sibling := range path {
 		if pathIndices[i] {
-			
+
 			current = crypto.Keccak256(append(current, sibling...))
 		} else {
-			
+
 			current = crypto.Keccak256(append(sibling, current...))
 		}
 	}
@@ -497,26 +439,19 @@ func VerifyMerkleProof(leaf, root []byte, path [][]byte, pathIndices []bool) boo
 	return true
 }
 
-
 type ProofManager struct {
 	mu sync.RWMutex
 
-	
 	Owner common.Address
 
-	
 	Proofs map[[32]byte]*SelectiveDisclosureProof
 
-	
 	ProofsByStream map[[32]byte][][32]byte
 
-	
 	ProofsByType map[ProofType][][32]byte
 
-	
 	VerificationLog []VerificationEntry
 }
-
 
 type VerificationEntry struct {
 	ProofID   [32]byte       `json:"proof_id"`
@@ -524,7 +459,6 @@ type VerificationEntry struct {
 	Timestamp int64          `json:"timestamp"`
 	Result    bool           `json:"result"`
 }
-
 
 func NewProofManager(owner common.Address) *ProofManager {
 	return &ProofManager{
@@ -535,7 +469,6 @@ func NewProofManager(owner common.Address) *ProofManager {
 		VerificationLog: make([]VerificationEntry, 0),
 	}
 }
-
 
 func (pm *ProofManager) AddProof(proof *SelectiveDisclosureProof) error {
 	pm.mu.Lock()
@@ -552,13 +485,11 @@ func (pm *ProofManager) AddProof(proof *SelectiveDisclosureProof) error {
 	return nil
 }
 
-
 func (pm *ProofManager) GetProof(proofID [32]byte) *SelectiveDisclosureProof {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	return pm.Proofs[proofID]
 }
-
 
 func (pm *ProofManager) VerifyProof(proofID [32]byte, verifier common.Address) (bool, error) {
 	pm.mu.Lock()
@@ -571,7 +502,6 @@ func (pm *ProofManager) VerifyProof(proofID [32]byte, verifier common.Address) (
 
 	result := proof.IsValid()
 
-	
 	pm.VerificationLog = append(pm.VerificationLog, VerificationEntry{
 		ProofID:   proofID,
 		Verifier:  verifier,
@@ -581,7 +511,6 @@ func (pm *ProofManager) VerifyProof(proofID [32]byte, verifier common.Address) (
 
 	return result, nil
 }
-
 
 func (pm *ProofManager) RevokeProof(proofID [32]byte, revoker common.Address) error {
 	pm.mu.Lock()
@@ -604,7 +533,6 @@ func (pm *ProofManager) RevokeProof(proofID [32]byte, revoker common.Address) er
 	return nil
 }
 
-
 func (pm *ProofManager) GetProofsForStream(streamID [32]byte) []*SelectiveDisclosureProof {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
@@ -618,7 +546,6 @@ func (pm *ProofManager) GetProofsForStream(streamID [32]byte) []*SelectiveDisclo
 	return result
 }
 
-
 func (pm *ProofManager) ExportProofs() ([]byte, error) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
@@ -626,13 +553,11 @@ func (pm *ProofManager) ExportProofs() ([]byte, error) {
 	return json.Marshal(pm.Proofs)
 }
 
-
 func IntToBytes(n int64) []byte {
 	b := make([]byte, 8)
 	binary.BigEndian.PutUint64(b, uint64(n))
 	return b
 }
-
 
 func BytesToInt(b []byte) int64 {
 	if len(b) < 8 {
