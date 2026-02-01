@@ -1,5 +1,3 @@
-
-
 package identity
 
 import (
@@ -15,36 +13,27 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-
 type Identity struct {
-	
+
 	PrivateKey *ecdsa.PrivateKey
 
-	
 	Address common.Address
 
-	
 	ForkID [32]byte
 
-	
 	ShortID string
 }
 
-
 type Config struct {
-	
+
 	DataDir string
 
-	
 	ImportKey string
 
-	
 	PasskeySecret []byte
 
-	
 	RequirePasskey bool
 }
-
 
 func DefaultDataDir() string {
 	home, err := os.UserHomeDir()
@@ -54,13 +43,11 @@ func DefaultDataDir() string {
 	return filepath.Join(home, ".zeam")
 }
 
-
 func New(cfg Config) (*Identity, error) {
 	if cfg.DataDir == "" {
 		cfg.DataDir = DefaultDataDir()
 	}
 
-	
 	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create data directory: %w", err)
 	}
@@ -71,13 +58,12 @@ func New(cfg Config) (*Identity, error) {
 	var privateKey *ecdsa.PrivateKey
 	var err error
 
-	
 	if cfg.ImportKey != "" {
 		privateKey, err = crypto.HexToECDSA(cfg.ImportKey)
 		if err != nil {
 			return nil, fmt.Errorf("invalid import key: %w", err)
 		}
-		
+
 		if len(cfg.PasskeySecret) > 0 {
 			enc, err := EncryptPrivateKey(privateKey, cfg.PasskeySecret)
 			if err != nil {
@@ -86,7 +72,7 @@ func New(cfg Config) (*Identity, error) {
 			if err := SaveEncryptedKey(encKeyPath, enc); err != nil {
 				return nil, fmt.Errorf("failed to save encrypted key: %w", err)
 			}
-			
+
 			os.Remove(keyPath)
 		} else {
 			if err := saveKey(keyPath, privateKey); err != nil {
@@ -94,7 +80,7 @@ func New(cfg Config) (*Identity, error) {
 			}
 		}
 	} else if fileExists(encKeyPath) {
-		
+
 		if len(cfg.PasskeySecret) == 0 {
 			return nil, fmt.Errorf("encrypted key found - passkey required to unlock")
 		}
@@ -107,7 +93,7 @@ func New(cfg Config) (*Identity, error) {
 			return nil, fmt.Errorf("failed to decrypt key: %w", err)
 		}
 	} else if fileExists(keyPath) {
-		
+
 		if cfg.RequirePasskey {
 			return nil, fmt.Errorf("unencrypted key found but passkey required")
 		}
@@ -115,7 +101,7 @@ func New(cfg Config) (*Identity, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to load identity: %w", err)
 		}
-		
+
 		if len(cfg.PasskeySecret) > 0 {
 			enc, err := EncryptPrivateKey(privateKey, cfg.PasskeySecret)
 			if err != nil {
@@ -124,16 +110,16 @@ func New(cfg Config) (*Identity, error) {
 			if err := SaveEncryptedKey(encKeyPath, enc); err != nil {
 				return nil, fmt.Errorf("failed to save encrypted key: %w", err)
 			}
-			
+
 			os.Remove(keyPath)
 		}
 	} else {
-		
+
 		privateKey, err = crypto.GenerateKey()
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate key: %w", err)
 		}
-		
+
 		if len(cfg.PasskeySecret) > 0 {
 			enc, err := EncryptPrivateKey(privateKey, cfg.PasskeySecret)
 			if err != nil {
@@ -149,7 +135,6 @@ func New(cfg Config) (*Identity, error) {
 		}
 	}
 
-	
 	address := crypto.PubkeyToAddress(privateKey.PublicKey)
 	forkID := crypto.Keccak256Hash(address.Bytes())
 
@@ -157,16 +142,14 @@ func New(cfg Config) (*Identity, error) {
 		PrivateKey: privateKey,
 		Address:    address,
 		ForkID:     forkID,
-		ShortID:    address.Hex()[2:10], 
+		ShortID:    address.Hex()[2:10],
 	}, nil
 }
-
 
 func (id *Identity) Sign(data []byte) ([]byte, error) {
 	hash := crypto.Keccak256(data)
 	return crypto.Sign(hash, id.PrivateKey)
 }
-
 
 func Verify(data []byte, sig []byte, address common.Address) bool {
 	hash := crypto.Keccak256(data)
@@ -178,16 +161,13 @@ func Verify(data []byte, sig []byte, address common.Address) bool {
 	return recoveredAddr == address
 }
 
-
 func (id *Identity) Export() string {
 	return hex.EncodeToString(crypto.FromECDSA(id.PrivateKey))
 }
 
-
 func (id *Identity) String() string {
 	return fmt.Sprintf("ZEAM Identity: %s (Fork: 0x%s...)", id.Address.Hex(), hex.EncodeToString(id.ForkID[:4]))
 }
-
 
 func (id *Identity) GetForkGenesis() []byte {
 	genesis := struct {
@@ -199,19 +179,17 @@ func (id *Identity) GetForkGenesis() []byte {
 		Version: 1,
 		ForkID:  hex.EncodeToString(id.ForkID[:]),
 		Address: id.Address.Hex(),
-		Timestamp: 0, 
+		Timestamp: 0,
 	}
 
 	data, _ := json.Marshal(genesis)
 	return data
 }
 
-
 func saveKey(path string, key *ecdsa.PrivateKey) error {
 	keyHex := hex.EncodeToString(crypto.FromECDSA(key))
 	return os.WriteFile(path, []byte(keyHex), 0600)
 }
-
 
 func loadKey(path string) (*ecdsa.PrivateKey, error) {
 	data, err := os.ReadFile(path)
@@ -221,12 +199,10 @@ func loadKey(path string) (*ecdsa.PrivateKey, error) {
 	return crypto.HexToECDSA(string(data))
 }
 
-
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
-
 
 func GenerateNewKey() (*ecdsa.PrivateKey, error) {
 	return ecdsa.GenerateKey(crypto.S256(), rand.Reader)

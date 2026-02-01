@@ -1,5 +1,3 @@
-
-
 package identity
 
 import (
@@ -16,71 +14,56 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-
 type IdentityMode int
 
 const (
-	
+
 	ModeFileBased IdentityMode = iota
 
-	
 	ModeStateless
 
-	
 	ModeHybrid
 )
 
-
 type UnifiedIdentity struct {
-	
+
 	PrivateKey *ecdsa.PrivateKey
 	Address    common.Address
 	ForkID     [32]byte
 	ShortID    string
 
-	
 	Mode IdentityMode
 
-	
 	stateless *StatelessIdentity
 
-	
 	forkState *ForkState
 
-	
 	dataDir string
 }
 
-
 type UnifiedConfig struct {
-	
+
 	DataDir string
 
-	
 	Mode IdentityMode
 
-	
 	ImportKey     string
 	PasskeySecret []byte
 
-	
 	UserSecret  []byte
 	ChainSalt   []byte
-	ChainID     string 
+	ChainID     string
 	Gate        HardwareGate
 	DerivConfig DerivationConfig
 }
-
 
 func NewUnifiedIdentity(cfg UnifiedConfig) (*UnifiedIdentity, error) {
 	if cfg.DataDir == "" {
 		cfg.DataDir = DefaultDataDir()
 	}
 
-	
 	return newStatelessIdentity(cfg)
 }
-
 
 func newFileBasedIdentity(cfg UnifiedConfig) (*UnifiedIdentity, error) {
 	id, err := New(Config{
@@ -102,7 +85,6 @@ func newFileBasedIdentity(cfg UnifiedConfig) (*UnifiedIdentity, error) {
 	}, nil
 }
 
-
 func newStatelessIdentity(cfg UnifiedConfig) (*UnifiedIdentity, error) {
 	log.Printf("[STATELESS] newStatelessIdentity called, DataDir=%s, SecretLen=%d", cfg.DataDir, len(cfg.UserSecret))
 
@@ -110,10 +92,9 @@ func newStatelessIdentity(cfg UnifiedConfig) (*UnifiedIdentity, error) {
 		return nil, fmt.Errorf("user secret too short (minimum 8 bytes)")
 	}
 
-	
 	chainSalt := cfg.ChainSalt
 	if len(chainSalt) == 0 {
-		
+
 		saltPath := filepath.Join(cfg.DataDir, "chain_salt.anchor")
 		log.Printf("[STATELESS] Checking for chain salt at: %s\n", saltPath)
 		if data, err := os.ReadFile(saltPath); err == nil {
@@ -121,14 +102,13 @@ func newStatelessIdentity(cfg UnifiedConfig) (*UnifiedIdentity, error) {
 			chainSalt = data
 		} else {
 			log.Printf("[STATELESS] No chain salt found, generating new one. Error was: %v\n", err)
-			
-			
+
 			var err error
 			chainSalt, err = GenerateChainSalt()
 			if err != nil {
 				return nil, fmt.Errorf("failed to generate chain salt: %w", err)
 			}
-			
+
 			log.Printf("[STATELESS] Creating data dir: %s\n", cfg.DataDir)
 			if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
 				log.Printf("[STATELESS] Failed to create data dir: %v\n", err)
@@ -143,19 +123,16 @@ func newStatelessIdentity(cfg UnifiedConfig) (*UnifiedIdentity, error) {
 		}
 	}
 
-	
 	derivConfig := cfg.DerivConfig
 	if derivConfig.Domain == "" {
 		derivConfig = DefaultDerivationConfig()
 	}
 
-	
 	gate := cfg.Gate
 	if gate == nil {
 		gate = DetectHardwareGate()
 	}
 
-	
 	stateless, err := DeriveIdentity(cfg.UserSecret, chainSalt, gate, derivConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive identity: %w", err)
@@ -172,38 +149,31 @@ func newStatelessIdentity(cfg UnifiedConfig) (*UnifiedIdentity, error) {
 	}, nil
 }
 
-
 func newHybridIdentity(cfg UnifiedConfig) (*UnifiedIdentity, error) {
-	
+
 	if len(cfg.UserSecret) > 0 && len(cfg.ChainSalt) > 0 {
 		return newStatelessIdentity(cfg)
 	}
 
-	
 	saltPath := filepath.Join(cfg.DataDir, "chain_salt.anchor")
 	if _, err := os.Stat(saltPath); err == nil && len(cfg.UserSecret) > 0 {
 		return newStatelessIdentity(cfg)
 	}
 
-	
 	return newFileBasedIdentity(cfg)
 }
-
 
 func (ui *UnifiedIdentity) IsStateless() bool {
 	return ui.Mode == ModeStateless && ui.stateless != nil
 }
 
-
 func (ui *UnifiedIdentity) GetStatelessIdentity() *StatelessIdentity {
 	return ui.stateless
 }
 
-
 func (ui *UnifiedIdentity) GetForkState() *ForkState {
 	return ui.forkState
 }
-
 
 func (ui *UnifiedIdentity) Sign(data []byte) ([]byte, error) {
 	if ui.stateless != nil {
@@ -216,7 +186,6 @@ func (ui *UnifiedIdentity) Sign(data []byte) ([]byte, error) {
 	return crypto.Sign(hash, ui.PrivateKey)
 }
 
-
 func (ui *UnifiedIdentity) Export() (string, error) {
 	if ui.Mode == ModeStateless {
 		return "", fmt.Errorf("stateless identity cannot be exported - re-derive with user secret")
@@ -226,7 +195,6 @@ func (ui *UnifiedIdentity) Export() (string, error) {
 	}
 	return hex.EncodeToString(crypto.FromECDSA(ui.PrivateKey)), nil
 }
-
 
 func (ui *UnifiedIdentity) Lock() {
 	if ui.stateless != nil {
@@ -239,7 +207,6 @@ func (ui *UnifiedIdentity) Lock() {
 	}
 }
 
-
 func (ui *UnifiedIdentity) IsValid() bool {
 	if ui.stateless != nil {
 		return ui.stateless.IsValid()
@@ -247,14 +214,12 @@ func (ui *UnifiedIdentity) IsValid() bool {
 	return ui.PrivateKey != nil
 }
 
-
 func (ui *UnifiedIdentity) GateType() GateType {
 	if ui.stateless != nil {
 		return ui.stateless.GateType()
 	}
 	return GateTypeNone
 }
-
 
 type MigrationInfo struct {
 	Address       common.Address `json:"address"`
@@ -265,7 +230,6 @@ type MigrationInfo struct {
 	MigratedAt    *time.Time     `json:"migrated_at,omitempty"`
 	NewChainSalt  []byte         `json:"new_chain_salt,omitempty"`
 }
-
 
 func CheckMigrationStatus(dataDir string) (*MigrationInfo, error) {
 	if dataDir == "" {
@@ -279,10 +243,9 @@ func CheckMigrationStatus(dataDir string) (*MigrationInfo, error) {
 	}
 
 	if !info.HasEncrypted && !info.HasPlain {
-		return nil, nil 
+		return nil, nil
 	}
 
-	
 	migratedPath := filepath.Join(dataDir, "identity.migrated")
 	if data, err := os.ReadFile(migratedPath); err == nil {
 		var migrated struct {
@@ -298,14 +261,13 @@ func CheckMigrationStatus(dataDir string) (*MigrationInfo, error) {
 	return info, nil
 }
 
-
 func MigrateToStateless(
 	dataDir string,
 	passkey []byte,
 	newUserSecret []byte,
 	gate HardwareGate,
 ) (*UnifiedIdentity, []byte, error) {
-	
+
 	oldID, err := New(Config{
 		DataDir:       dataDir,
 		PasskeySecret: passkey,
@@ -314,27 +276,22 @@ func MigrateToStateless(
 		return nil, nil, fmt.Errorf("failed to load old identity: %w", err)
 	}
 
-	
 	commitment, err := GenerateChainSalt()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate commitment: %w", err)
 	}
 
-	
 	chainSalt := ChainSaltFromBlockHash(oldID.Address.Bytes(), commitment)
 
-	
 	if gate == nil {
 		gate = DetectHardwareGate()
 	}
 
-	
 	stateless, err := DeriveIdentity(newUserSecret, chainSalt, gate, DefaultDerivationConfig())
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to derive stateless identity: %w", err)
 	}
 
-	
 	migrated := struct {
 		MigratedAt   time.Time      `json:"migrated_at"`
 		OldAddress   common.Address `json:"old_address"`
@@ -353,7 +310,6 @@ func MigrateToStateless(
 		return nil, nil, fmt.Errorf("failed to write migration marker: %w", err)
 	}
 
-	
 	saltPath := filepath.Join(dataDir, "chain_salt.anchor")
 	if err := os.WriteFile(saltPath, chainSalt, 0600); err != nil {
 		return nil, nil, fmt.Errorf("failed to save chain salt: %w", err)
@@ -372,7 +328,6 @@ func MigrateToStateless(
 	return unified, chainSalt, nil
 }
 
-
 func CreateGenesisForMigration(
 	ui *UnifiedIdentity,
 	oldAddress common.Address,
@@ -390,11 +345,9 @@ func CreateGenesisForMigration(
 	return genesis, nil
 }
 
-
 func DetectIdentityMode(dataDir string) IdentityMode {
 	return ModeStateless
 }
-
 
 func QuickStateless(userSecret []byte) (*UnifiedIdentity, error) {
 	return NewUnifiedIdentity(UnifiedConfig{

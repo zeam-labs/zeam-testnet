@@ -1,5 +1,3 @@
-
-
 package identity
 
 import (
@@ -13,106 +11,81 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-
 type RecoveryState string
 
 const (
-	
+
 	RecoveryInitiated RecoveryState = "initiated"
-	
+
 	RecoveryPending RecoveryState = "pending"
-	
+
 	RecoveryApproved RecoveryState = "approved"
-	
+
 	RecoveryExecuted RecoveryState = "executed"
-	
+
 	RecoveryCancelled RecoveryState = "cancelled"
-	
+
 	RecoveryFailed RecoveryState = "failed"
 )
 
-
 type CrossForkRecovery struct {
-	
+
 	ID [32]byte `json:"id"`
 
-	
 	SourceForkID [32]byte `json:"source_fork_id"`
 
-	
 	TargetForkID [32]byte `json:"target_fork_id"`
 
-	
 	SourceAddress common.Address `json:"source_address"`
 
-	
 	TargetAddress common.Address `json:"target_address"`
 
-	
 	State RecoveryState `json:"state"`
 
-	
 	Method RecoveryMethod `json:"method"`
 
-	
 	InitiatedAt int64 `json:"initiated_at"`
 
-	
 	CompletedAt int64 `json:"completed_at,omitempty"`
 
-	
 	TimeLockExpiry int64 `json:"time_lock_expiry,omitempty"`
 
-	
 	Approvals []RecoveryApproval `json:"approvals,omitempty"`
 
-	
 	RequiredApprovals int `json:"required_approvals,omitempty"`
 
-	
 	RecoveryData *RecoveryData `json:"recovery_data"`
 
-	
 	StreamsToRecover [][32]byte `json:"streams_to_recover,omitempty"`
 
-	
 	TargetSignature []byte `json:"target_signature"`
 }
 
-
 type RecoveryApproval struct {
-	
+
 	Approver common.Address `json:"approver"`
 
-	
 	ApprovedAt int64 `json:"approved_at"`
 
-	
 	Signature []byte `json:"signature"`
 
-	
 	Comment string `json:"comment,omitempty"`
 }
 
-
 type RecoveryData struct {
-	
+
 	PhraseHash []byte `json:"phrase_hash,omitempty"`
 
-	
 	Guardians       []common.Address `json:"guardians,omitempty"`
 	GuardianQuorum  int              `json:"guardian_quorum,omitempty"`
 
-	
 	CheckpointHash  [32]byte `json:"checkpoint_hash,omitempty"`
 	CheckpointEpoch int64    `json:"checkpoint_epoch,omitempty"`
 
-	
 	SourceNetworkID string `json:"source_network_id,omitempty"`
 	TargetNetworkID string `json:"target_network_id,omitempty"`
 	MigrationProof  []byte `json:"migration_proof,omitempty"`
 }
-
 
 func (cfr *CrossForkRecovery) GenerateID() {
 	data, _ := json.Marshal(struct {
@@ -125,7 +98,6 @@ func (cfr *CrossForkRecovery) GenerateID() {
 
 	cfr.ID = crypto.Keccak256Hash(data)
 }
-
 
 func (cfr *CrossForkRecovery) SignWithTarget(privateKey *ecdsa.PrivateKey) error {
 	addr := crypto.PubkeyToAddress(privateKey.PublicKey)
@@ -149,7 +121,6 @@ func (cfr *CrossForkRecovery) SignWithTarget(privateKey *ecdsa.PrivateKey) error
 	return nil
 }
 
-
 func (cfr *CrossForkRecovery) Verify() bool {
 	if len(cfr.TargetSignature) == 0 {
 		return false
@@ -172,9 +143,8 @@ func (cfr *CrossForkRecovery) Verify() bool {
 	return crypto.PubkeyToAddress(*pubKey) == cfr.TargetAddress
 }
 
-
 func (cfr *CrossForkRecovery) AddApproval(approver common.Address, signature []byte, comment string) error {
-	
+
 	data, _ := json.Marshal(struct {
 		RecoveryID [32]byte
 		Approver   common.Address
@@ -191,7 +161,6 @@ func (cfr *CrossForkRecovery) AddApproval(approver common.Address, signature []b
 		return fmt.Errorf("signature does not match approver")
 	}
 
-	
 	isGuardian := false
 	if cfr.RecoveryData != nil {
 		for _, g := range cfr.RecoveryData.Guardians {
@@ -205,7 +174,6 @@ func (cfr *CrossForkRecovery) AddApproval(approver common.Address, signature []b
 		return fmt.Errorf("approver is not a guardian")
 	}
 
-	
 	for _, a := range cfr.Approvals {
 		if a.Approver == approver {
 			return fmt.Errorf("already approved by this guardian")
@@ -219,14 +187,12 @@ func (cfr *CrossForkRecovery) AddApproval(approver common.Address, signature []b
 		Comment:    comment,
 	})
 
-	
 	if len(cfr.Approvals) >= cfr.RequiredApprovals {
 		cfr.State = RecoveryApproved
 	}
 
 	return nil
 }
-
 
 func (cfr *CrossForkRecovery) CanExecute() (bool, string) {
 	if cfr.State == RecoveryExecuted {
@@ -257,7 +223,7 @@ func (cfr *CrossForkRecovery) CanExecute() (bool, string) {
 		return true, ""
 
 	case RecoveryPhrase:
-		
+
 		if cfr.State == RecoveryApproved || cfr.State == RecoveryPending {
 			return true, ""
 		}
@@ -267,7 +233,6 @@ func (cfr *CrossForkRecovery) CanExecute() (bool, string) {
 		return false, "unknown recovery method"
 	}
 }
-
 
 func (cfr *CrossForkRecovery) Execute() error {
 	canExecute, reason := cfr.CanExecute()
@@ -280,45 +245,33 @@ func (cfr *CrossForkRecovery) Execute() error {
 	return nil
 }
 
-
 func (cfr *CrossForkRecovery) Cancel() {
 	cfr.State = RecoveryCancelled
 	cfr.CompletedAt = time.Now().Unix()
 }
 
-
 type RecoveryCheckpoint struct {
-	
+
 	ID [32]byte `json:"id"`
 
-	
 	ForkID [32]byte `json:"fork_id"`
 
-	
 	Address common.Address `json:"address"`
 
-	
 	Epoch int64 `json:"epoch"`
 
-	
 	Timestamp int64 `json:"timestamp"`
 
-	
 	StateRoot [32]byte `json:"state_root"`
 
-	
 	StreamHashes map[[32]byte][32]byte `json:"stream_hashes"`
 
-	
 	RightsHash [32]byte `json:"rights_hash"`
 
-	
 	DelegationsHash [32]byte `json:"delegations_hash"`
 
-	
 	Signature []byte `json:"signature"`
 }
-
 
 func (rc *RecoveryCheckpoint) Sign(privateKey *ecdsa.PrivateKey) error {
 	addr := crypto.PubkeyToAddress(privateKey.PublicKey)
@@ -342,7 +295,6 @@ func (rc *RecoveryCheckpoint) Sign(privateKey *ecdsa.PrivateKey) error {
 	return nil
 }
 
-
 func (rc *RecoveryCheckpoint) Verify() bool {
 	if len(rc.Signature) == 0 {
 		return false
@@ -365,35 +317,25 @@ func (rc *RecoveryCheckpoint) Verify() bool {
 	return crypto.PubkeyToAddress(*pubKey) == rc.Address
 }
 
-
 type RecoveryManager struct {
 	mu sync.RWMutex
 
-	
 	ForkID [32]byte
 
-	
 	Owner common.Address
 
-	
 	Recoveries map[[32]byte]*CrossForkRecovery
 
-	
 	Checkpoints map[int64]*RecoveryCheckpoint
 
-	
 	Guardians []common.Address
 
-	
 	GuardianQuorum int
 
-	
 	TimeLockDuration int64
 
-	
 	RecoveryPhraseHash []byte
 }
-
 
 func NewRecoveryManager(forkID [32]byte, owner common.Address) *RecoveryManager {
 	return &RecoveryManager{
@@ -403,10 +345,9 @@ func NewRecoveryManager(forkID [32]byte, owner common.Address) *RecoveryManager 
 		Checkpoints:      make(map[int64]*RecoveryCheckpoint),
 		Guardians:        make([]common.Address, 0),
 		GuardianQuorum:   0,
-		TimeLockDuration: 7 * 24 * 60 * 60, 
+		TimeLockDuration: 7 * 24 * 60 * 60,
 	}
 }
-
 
 func (rm *RecoveryManager) SetupSocialRecovery(guardians []common.Address, quorum int) error {
 	rm.mu.Lock()
@@ -424,13 +365,11 @@ func (rm *RecoveryManager) SetupSocialRecovery(guardians []common.Address, quoru
 	return nil
 }
 
-
 func (rm *RecoveryManager) SetRecoveryPhrase(phraseHash []byte) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 	rm.RecoveryPhraseHash = phraseHash
 }
-
 
 func (rm *RecoveryManager) InitiateTimeLockRecovery(
 	targetAddress common.Address,
@@ -463,7 +402,6 @@ func (rm *RecoveryManager) InitiateTimeLockRecovery(
 	rm.Recoveries[recovery.ID] = recovery
 	return recovery, nil
 }
-
 
 func (rm *RecoveryManager) InitiateSocialRecovery(
 	targetAddress common.Address,
@@ -503,7 +441,6 @@ func (rm *RecoveryManager) InitiateSocialRecovery(
 	return recovery, nil
 }
 
-
 func (rm *RecoveryManager) InitiatePhraseRecovery(
 	targetAddress common.Address,
 	targetKey *ecdsa.PrivateKey,
@@ -516,7 +453,6 @@ func (rm *RecoveryManager) InitiatePhraseRecovery(
 		return nil, fmt.Errorf("recovery phrase not configured")
 	}
 
-	
 	if len(phraseHash) != len(rm.RecoveryPhraseHash) {
 		return nil, fmt.Errorf("invalid recovery phrase")
 	}
@@ -533,7 +469,7 @@ func (rm *RecoveryManager) InitiatePhraseRecovery(
 		TargetForkID:      rm.ForkID,
 		SourceAddress:     rm.Owner,
 		TargetAddress:     targetAddress,
-		State:             RecoveryApproved, 
+		State:             RecoveryApproved,
 		Method:            RecoveryPhrase,
 		InitiatedAt:       now,
 		RequiredApprovals: 0,
@@ -551,7 +487,6 @@ func (rm *RecoveryManager) InitiatePhraseRecovery(
 	rm.Recoveries[recovery.ID] = recovery
 	return recovery, nil
 }
-
 
 func (rm *RecoveryManager) AddGuardianApproval(
 	recoveryID [32]byte,
@@ -572,7 +507,6 @@ func (rm *RecoveryManager) AddGuardianApproval(
 
 	guardian := crypto.PubkeyToAddress(guardianKey.PublicKey)
 
-	
 	data, _ := json.Marshal(struct {
 		RecoveryID [32]byte
 		Approver   common.Address
@@ -587,7 +521,6 @@ func (rm *RecoveryManager) AddGuardianApproval(
 
 	return recovery.AddApproval(guardian, sig, comment)
 }
-
 
 func (rm *RecoveryManager) CreateCheckpoint(
 	privateKey *ecdsa.PrivateKey,
@@ -616,7 +549,6 @@ func (rm *RecoveryManager) CreateCheckpoint(
 		DelegationsHash: delegationsHash,
 	}
 
-	
 	idData, _ := json.Marshal(struct {
 		ForkID  [32]byte
 		Address common.Address
@@ -632,13 +564,11 @@ func (rm *RecoveryManager) CreateCheckpoint(
 	return checkpoint, nil
 }
 
-
 func (rm *RecoveryManager) GetCheckpoint(epoch int64) *RecoveryCheckpoint {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 	return rm.Checkpoints[epoch]
 }
-
 
 func (rm *RecoveryManager) GetLatestCheckpoint() *RecoveryCheckpoint {
 	rm.mu.RLock()
@@ -657,7 +587,6 @@ func (rm *RecoveryManager) GetLatestCheckpoint() *RecoveryCheckpoint {
 	return latest
 }
 
-
 func (rm *RecoveryManager) ExecuteRecovery(recoveryID [32]byte) error {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -671,19 +600,16 @@ func (rm *RecoveryManager) ExecuteRecovery(recoveryID [32]byte) error {
 		return err
 	}
 
-	
 	rm.Owner = recovery.TargetAddress
 
 	return nil
 }
-
 
 func (rm *RecoveryManager) GetRecovery(recoveryID [32]byte) *CrossForkRecovery {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 	return rm.Recoveries[recoveryID]
 }
-
 
 func (rm *RecoveryManager) GetActiveRecoveries() []*CrossForkRecovery {
 	rm.mu.RLock()
@@ -697,7 +623,6 @@ func (rm *RecoveryManager) GetActiveRecoveries() []*CrossForkRecovery {
 	}
 	return result
 }
-
 
 func (rm *RecoveryManager) ExportRecoveryData() ([]byte, error) {
 	rm.mu.RLock()

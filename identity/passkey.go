@@ -1,5 +1,3 @@
-
-
 package identity
 
 import (
@@ -17,52 +15,40 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-
 type EncryptedKey struct {
-	
+
 	Version int `json:"version"`
 
-	
 	Salt []byte `json:"salt"`
 
-	
 	Nonce []byte `json:"nonce"`
 
-	
 	Ciphertext []byte `json:"ciphertext"`
 
-	
 	CredentialID []byte `json:"credential_id,omitempty"`
 }
 
-
 type PasskeyConfig struct {
-	
+
 	RelyingPartyID string
 
-	
 	UserID string
 }
 
-
 func DeriveKeyFromPasskey(secret []byte, salt []byte) []byte {
-	
-	
+
 	return argon2.IDKey(secret, salt, 3, 64*1024, 4, 32)
 }
 
-
 func EncryptPrivateKey(privateKey *ecdsa.PrivateKey, passkeySecret []byte) (*EncryptedKey, error) {
-	
+
 	salt := make([]byte, 32)
 	if _, err := rand.Read(salt); err != nil {
 		return nil, fmt.Errorf("failed to generate salt: %w", err)
 	}
 
-	
 	encKey := DeriveKeyFromPasskey(passkeySecret, salt)
 
-	
 	block, err := aes.NewCipher(encKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cipher: %w", err)
@@ -73,17 +59,14 @@ func EncryptPrivateKey(privateKey *ecdsa.PrivateKey, passkeySecret []byte) (*Enc
 		return nil, fmt.Errorf("failed to create GCM: %w", err)
 	}
 
-	
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, fmt.Errorf("failed to generate nonce: %w", err)
 	}
 
-	
 	plaintext := crypto.FromECDSA(privateKey)
 	ciphertext := gcm.Seal(nil, nonce, plaintext, nil)
 
-	
 	for i := range plaintext {
 		plaintext[i] = 0
 	}
@@ -96,12 +79,10 @@ func EncryptPrivateKey(privateKey *ecdsa.PrivateKey, passkeySecret []byte) (*Enc
 	}, nil
 }
 
-
 func DecryptPrivateKey(enc *EncryptedKey, passkeySecret []byte) (*ecdsa.PrivateKey, error) {
-	
+
 	encKey := DeriveKeyFromPasskey(passkeySecret, enc.Salt)
 
-	
 	block, err := aes.NewCipher(encKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cipher: %w", err)
@@ -112,16 +93,13 @@ func DecryptPrivateKey(enc *EncryptedKey, passkeySecret []byte) (*ecdsa.PrivateK
 		return nil, fmt.Errorf("failed to create GCM: %w", err)
 	}
 
-	
 	plaintext, err := gcm.Open(nil, enc.Nonce, enc.Ciphertext, nil)
 	if err != nil {
 		return nil, fmt.Errorf("decryption failed (wrong passkey?): %w", err)
 	}
 
-	
 	privateKey, err := crypto.ToECDSA(plaintext)
 
-	
 	for i := range plaintext {
 		plaintext[i] = 0
 	}
@@ -133,7 +111,6 @@ func DecryptPrivateKey(enc *EncryptedKey, passkeySecret []byte) (*ecdsa.PrivateK
 	return privateKey, nil
 }
 
-
 func SaveEncryptedKey(path string, enc *EncryptedKey) error {
 	data, err := json.MarshalIndent(enc, "", "  ")
 	if err != nil {
@@ -141,7 +118,6 @@ func SaveEncryptedKey(path string, enc *EncryptedKey) error {
 	}
 	return os.WriteFile(path, data, 0600)
 }
-
 
 func LoadEncryptedKey(path string) (*EncryptedKey, error) {
 	data, err := os.ReadFile(path)
@@ -157,16 +133,14 @@ func LoadEncryptedKey(path string) (*EncryptedKey, error) {
 	return &enc, nil
 }
 
-
 func IsEncryptedKeyFile(path string) bool {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return false
 	}
-	
+
 	return len(data) > 0 && data[0] == '{'
 }
-
 
 func HashPasskeySecret(credentialID []byte, clientDataJSON []byte, authenticatorData []byte) []byte {
 	h := sha256.New()
@@ -176,23 +150,19 @@ func HashPasskeySecret(credentialID []byte, clientDataJSON []byte, authenticator
 	return h.Sum(nil)
 }
 
-
 func GenerateRecoveryPhrase() (string, []byte, error) {
-	
+
 	entropy := make([]byte, 32)
 	if _, err := rand.Read(entropy); err != nil {
 		return "", nil, fmt.Errorf("failed to generate entropy: %w", err)
 	}
 
-	
 	phrase := hex.EncodeToString(entropy)
 
-	
 	secret := sha256.Sum256(entropy)
 
 	return phrase, secret[:], nil
 }
-
 
 func RecoveryPhraseToSecret(phrase string) ([]byte, error) {
 	entropy, err := hex.DecodeString(phrase)

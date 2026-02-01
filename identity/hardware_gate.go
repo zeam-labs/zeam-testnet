@@ -1,5 +1,3 @@
-
-
 package identity
 
 import (
@@ -15,77 +13,62 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-
 type HardwareGate interface {
-	
+
 	Available() bool
 
-	
 	Type() GateType
 
-	
 	Attest(challenge []byte) ([]byte, error)
 
-	
 	Verify(challenge, attestation []byte) bool
 
-	
 	PublicKey() ([]byte, error)
 }
-
 
 type GateType string
 
 const (
-	GateTypeSecureEnclave GateType = "secure_enclave" 
-	GateTypeTPM           GateType = "tpm"            
-	GateTypeWebAuthn      GateType = "webauthn"       
-	GateTypeSoftware      GateType = "software"       
-	GateTypeNone          GateType = "none"           
+	GateTypeSecureEnclave GateType = "secure_enclave"
+	GateTypeTPM           GateType = "tpm"
+	GateTypeWebAuthn      GateType = "webauthn"
+	GateTypeSoftware      GateType = "software"
+	GateTypeNone          GateType = "none"
 )
 
-
 type GateCapabilities struct {
-	
+
 	CanAttest bool
 
-	
 	CanVerify bool
 
-	
 	KeyNeverExportable bool
 
-	
 	RequiresBiometric bool
 
-	
 	RequiresPIN bool
 }
-
 
 func DetectHardwareGate() HardwareGate {
 	switch runtime.GOOS {
 	case "darwin":
-		
+
 		gate := NewSecureEnclaveGate()
 		if gate.Available() {
 			return gate
 		}
-		
 
 	case "windows", "linux":
-		
+
 		gate := NewTPMGate()
 		if gate.Available() {
 			return gate
 		}
-		
+
 	}
 
-	
 	return NewSoftwareGate()
 }
-
 
 type SecureEnclaveGate struct {
 	mu        sync.Mutex
@@ -93,11 +76,9 @@ type SecureEnclaveGate struct {
 	pubKey    []byte
 }
 
-
 func NewSecureEnclaveGate() *SecureEnclaveGate {
 	gate := &SecureEnclaveGate{}
-	
-	
+
 	gate.available = false
 	return gate
 }
@@ -114,13 +95,12 @@ func (g *SecureEnclaveGate) Attest(challenge []byte) ([]byte, error) {
 	if !g.available {
 		return nil, fmt.Errorf("Secure Enclave not available")
 	}
-	
-	
+
 	return nil, fmt.Errorf("Secure Enclave not implemented - requires native code")
 }
 
 func (g *SecureEnclaveGate) Verify(challenge, attestation []byte) bool {
-	
+
 	return false
 }
 
@@ -141,18 +121,15 @@ func (g *SecureEnclaveGate) Capabilities() GateCapabilities {
 	}
 }
 
-
 type TPMGate struct {
 	mu        sync.Mutex
 	available bool
 	pubKey    []byte
 }
 
-
 func NewTPMGate() *TPMGate {
 	gate := &TPMGate{}
-	
-	
+
 	gate.available = false
 	return gate
 }
@@ -169,8 +146,7 @@ func (g *TPMGate) Attest(challenge []byte) ([]byte, error) {
 	if !g.available {
 		return nil, fmt.Errorf("TPM not available")
 	}
-	
-	
+
 	return nil, fmt.Errorf("TPM not implemented - requires native code")
 }
 
@@ -195,19 +171,17 @@ func (g *TPMGate) Capabilities() GateCapabilities {
 	}
 }
 
-
 type SoftwareGate struct {
 	mu         sync.Mutex
 	privateKey *ecdsa.PrivateKey
 	available  bool
 }
 
-
 func NewSoftwareGate() *SoftwareGate {
 	gate := &SoftwareGate{
 		available: true,
 	}
-	
+
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		gate.available = false
@@ -233,16 +207,13 @@ func (g *SoftwareGate) Attest(challenge []byte) ([]byte, error) {
 		return nil, fmt.Errorf("software gate not available")
 	}
 
-	
 	hash := sha256.Sum256(challenge)
 
-	
 	r, s, err := ecdsa.Sign(rand.Reader, g.privateKey, hash[:])
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign: %w", err)
 	}
 
-	
 	sig := make([]byte, 64)
 	rBytes := r.Bytes()
 	sBytes := s.Bytes()
@@ -262,7 +233,6 @@ func (g *SoftwareGate) Verify(challenge, attestation []byte) bool {
 
 	hash := sha256.Sum256(challenge)
 
-	
 	r := new(big.Int).SetBytes(attestation[:32])
 	s := new(big.Int).SetBytes(attestation[32:])
 
@@ -277,7 +247,6 @@ func (g *SoftwareGate) PublicKey() ([]byte, error) {
 		return nil, fmt.Errorf("no key available")
 	}
 
-	
 	return elliptic.MarshalCompressed(g.privateKey.Curve, g.privateKey.PublicKey.X, g.privateKey.PublicKey.Y), nil
 }
 
@@ -285,34 +254,31 @@ func (g *SoftwareGate) Capabilities() GateCapabilities {
 	return GateCapabilities{
 		CanAttest:          true,
 		CanVerify:          true,
-		KeyNeverExportable: false, 
+		KeyNeverExportable: false,
 		RequiresBiometric:  false,
 		RequiresPIN:        false,
 	}
 }
-
 
 func (g *SoftwareGate) Clear() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	if g.privateKey != nil {
-		
+
 		g.privateKey.D.SetInt64(0)
 		g.privateKey = nil
 	}
 }
 
-
 type NoGate struct{}
-
 
 func NewNoGate() *NoGate {
 	return &NoGate{}
 }
 
 func (g *NoGate) Available() bool {
-	return true 
+	return true
 }
 
 func (g *NoGate) Type() GateType {
@@ -320,12 +286,12 @@ func (g *NoGate) Type() GateType {
 }
 
 func (g *NoGate) Attest(challenge []byte) ([]byte, error) {
-	
+
 	return []byte{}, nil
 }
 
 func (g *NoGate) Verify(challenge, attestation []byte) bool {
-	
+
 	return len(attestation) == 0
 }
 
@@ -343,17 +309,14 @@ func (g *NoGate) Capabilities() GateCapabilities {
 	}
 }
 
-
 func AttestationChallenge(chainSalt []byte, timestamp int64, nonce []byte) []byte {
-	
+
 	domain := []byte("ZEAM_ATTESTATION_V1")
 
-	
 	data := make([]byte, 0, len(domain)+len(chainSalt)+8+len(nonce))
 	data = append(data, domain...)
 	data = append(data, chainSalt...)
 
-	
 	ts := make([]byte, 8)
 	for i := 7; i >= 0; i-- {
 		ts[i] = byte(timestamp)
@@ -362,8 +325,6 @@ func AttestationChallenge(chainSalt []byte, timestamp int64, nonce []byte) []byt
 	data = append(data, ts...)
 	data = append(data, nonce...)
 
-	
 	hash := crypto.Keccak256(data)
 	return hash
 }
-

@@ -1,0 +1,2947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZEAM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --blueprint-dark: #0d3a5c;
+            --blueprint-base: #0f4268;
+            --line-bright: #ffffff;
+            --line-mid: rgba(255, 255, 255, 0.6);
+            --line-dim: rgba(255, 255, 255, 0.25);
+            --line-ghost: rgba(255, 255, 255, 0.1);
+            --grid-line: rgba(255, 255, 255, 0.06);
+            --mono: 'JetBrains Mono', monospace;
+
+            /* Pressure colors */
+            --hadamard: #ff6b6b;
+            --pauliX: #4ecdc4;
+            --pauliZ: #ffe66d;
+            --phase: #a29bfe;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--mono);
+            background: var(--blueprint-dark);
+            color: var(--line-bright);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        /* GRID OVERLAY */
+        .grid-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+            background-image:
+                linear-gradient(var(--grid-line) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        /* TRACING LINES CANVAS */
+        .trace-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+            transition: opacity 1.5s ease;
+        }
+
+        .trace-canvas.hidden {
+            opacity: 0;
+        }
+
+        .grid-overlay.hidden {
+            opacity: 0;
+            transition: opacity 1.5s ease;
+        }
+
+        /* CONTENT LAYER */
+        .content {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* HEADER */
+        .header {
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--line-ghost);
+            flex-shrink: 0; /* Don't shrink */
+        }
+
+        .logo {
+            font-size: 0.9rem;
+            font-weight: 400;
+            letter-spacing: 0.2em;
+        }
+
+        .logo-separator {
+            color: var(--line-mid);
+            font-weight: 300;
+            margin: 0 0.1em;
+        }
+
+        .identity {
+            font-size: 0.65rem;
+            letter-spacing: 0.15em;
+            color: var(--line-dim);
+            text-transform: uppercase;
+        }
+
+        .identity .address {
+            color: var(--line-mid);
+            font-family: var(--mono);
+        }
+
+        /* MAIN CONTAINER - Fixed frame layout */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 0 2rem 1rem 2rem;
+            min-height: 0; /* Critical for nested flex scroll */
+            overflow: hidden;
+        }
+
+        /* PRESSURE BAR - Enhanced with SVG Gauges */
+        .pressure-bar {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1px;
+            background: var(--line-ghost);
+            flex-shrink: 0; /* Don't shrink */
+            margin-top: 1rem;
+        }
+
+        .pressure-item {
+            background: var(--blueprint-dark);
+            padding: 0.75rem 0.5rem;
+            text-align: center;
+        }
+
+        .pressure-label {
+            font-size: 0.5rem;
+            letter-spacing: 0.2em;
+            color: var(--line-dim);
+            text-transform: uppercase;
+            margin-bottom: 0.25rem;
+        }
+
+        .gauge-container {
+            position: relative;
+            width: 100%;
+            max-width: 100px;
+            margin: 0 auto;
+        }
+
+        .gauge-svg {
+            width: 100%;
+            height: auto;
+            overflow: visible;
+        }
+
+        .gauge-bg {
+            fill: none;
+            stroke: var(--line-ghost);
+            stroke-width: 6;
+            stroke-linecap: round;
+        }
+
+        .gauge-fill {
+            fill: none;
+            stroke-width: 6;
+            stroke-linecap: round;
+            stroke-dasharray: 126;
+            stroke-dashoffset: 126;
+            transition: stroke-dashoffset 0.15s ease-out;
+        }
+
+        .gauge-fill.hadamard { stroke: var(--hadamard); }
+        .gauge-fill.pauliX { stroke: var(--pauliX); }
+        .gauge-fill.pauliZ { stroke: var(--pauliZ); }
+        .gauge-fill.phase { stroke: var(--phase); }
+
+        .gauge-value {
+            font-size: 0.85rem;
+            font-weight: 300;
+            letter-spacing: 0.05em;
+            fill: var(--line-bright);
+        }
+
+        /* SEMANTIC CANVAS */
+        .semantic-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 3;
+            pointer-events: none;
+        }
+
+        /* NETWORK PANEL */
+        .network-panel {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            background: rgba(13, 58, 92, 0.9);
+            border: 1px solid var(--line-ghost);
+            padding: 0.75rem;
+            z-index: 20;
+            min-width: 160px;
+        }
+
+        .network-header {
+            font-size: 0.5rem;
+            letter-spacing: 0.2em;
+            color: var(--line-dim);
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+            border-bottom: 1px solid var(--line-ghost);
+            padding-bottom: 0.25rem;
+        }
+
+        .network-stats {
+            display: flex;
+            gap: 0.75rem;
+            font-size: 0.6rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .network-stats .stat {
+            color: var(--line-mid);
+        }
+
+        .network-stats .label {
+            color: var(--line-dim);
+        }
+
+        .flow-canvas {
+            width: 100%;
+            height: 40px;
+            display: block;
+        }
+
+        /* MINI PRESSURE BARS */
+        .mini-pressure {
+            display: flex;
+            gap: 2px;
+            height: 3px;
+            margin-top: 0.5rem;
+            opacity: 0.7;
+        }
+
+        .mini-pressure .bar {
+            height: 100%;
+            border-radius: 1px;
+            transition: width 0.3s ease;
+        }
+
+        .mini-pressure .bar.hadamard { background: var(--hadamard); }
+        .mini-pressure .bar.pauliX { background: var(--pauliX); }
+        .mini-pressure .bar.pauliZ { background: var(--pauliZ); }
+        .mini-pressure .bar.phase { background: var(--phase); }
+
+        /* CHAT CONTAINER */
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--line-ghost);
+            margin-top: 1rem;
+            min-height: 0; /* Allow flex shrinking */
+            overflow: hidden;
+        }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+            min-height: 0; /* Critical for flex scroll */
+        }
+
+        .message {
+            margin-bottom: 1.25rem;
+            padding: 1rem 1.25rem;
+            max-width: 85%;
+            font-size: 0.85rem;
+            line-height: 1.8;
+            font-weight: 300;
+        }
+
+        .message.user {
+            background: rgba(255, 255, 255, 0.08);
+            margin-left: auto;
+            border-left: 2px solid var(--line-mid);
+        }
+
+        .message.assistant {
+            background: rgba(255, 255, 255, 0.03);
+            border-left: 2px solid var(--line-dim);
+        }
+
+        .message .meta {
+            font-size: 0.6rem;
+            letter-spacing: 0.15em;
+            color: var(--line-dim);
+            margin-top: 0.75rem;
+            text-transform: uppercase;
+        }
+
+        /* INPUT AREA */
+        .input-area {
+            border-top: 1px solid var(--line-ghost);
+            padding: 1rem 1.5rem;
+            display: flex;
+            gap: 1rem;
+            flex-shrink: 0; /* Don't shrink */
+            background: var(--blueprint-dark); /* Solid background */
+        }
+
+        .input-area input {
+            flex: 1;
+            background: transparent;
+            border: 1px solid var(--line-dim);
+            padding: 0.875rem 1rem;
+            color: var(--line-bright);
+            font-family: var(--mono);
+            font-size: 0.8rem;
+            font-weight: 300;
+            letter-spacing: 0.05em;
+        }
+
+        .input-area input::placeholder {
+            color: var(--line-dim);
+            letter-spacing: 0.1em;
+        }
+
+        .input-area input:focus {
+            outline: none;
+            border-color: var(--line-mid);
+        }
+
+        .input-area button {
+            background: transparent;
+            color: var(--line-bright);
+            border: 1px solid var(--line-mid);
+            padding: 0.875rem 2rem;
+            font-family: var(--mono);
+            font-size: 0.7rem;
+            font-weight: 400;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .input-area button:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--line-bright);
+        }
+
+        .input-area button:disabled {
+            color: var(--line-dim);
+            border-color: var(--line-ghost);
+            cursor: not-allowed;
+        }
+
+        /* STATUS BAR */
+        .status {
+            font-size: 0.6rem;
+            letter-spacing: 0.15em;
+            padding: 0.75rem 1.5rem;
+            color: var(--line-dim);
+            display: flex;
+            justify-content: space-between;
+            border-top: 1px solid var(--line-ghost);
+            text-transform: uppercase;
+        }
+
+        .status .online {
+            color: var(--pauliX);
+        }
+
+        .status .online::before {
+            content: "● ";
+        }
+
+        /* MODAL OVERLAY */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(13, 58, 92, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.hidden {
+            display: none;
+        }
+
+        .modal {
+            background: var(--blueprint-dark);
+            border: 1px solid var(--line-dim);
+            padding: 2.5rem;
+            max-width: 420px;
+            width: 90%;
+        }
+
+        .modal-label {
+            font-size: 0.55rem;
+            letter-spacing: 0.3em;
+            color: var(--line-dim);
+            text-transform: uppercase;
+            margin-bottom: 0.75rem;
+        }
+
+        .modal h2 {
+            font-size: 1.5rem;
+            font-weight: 300;
+            letter-spacing: 0.2em;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal p {
+            color: var(--line-mid);
+            font-size: 0.75rem;
+            line-height: 1.8;
+            font-weight: 300;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal input {
+            width: 100%;
+            background: transparent;
+            border: 1px solid var(--line-dim);
+            padding: 0.875rem 1rem;
+            color: var(--line-bright);
+            font-family: var(--mono);
+            font-size: 0.8rem;
+            font-weight: 300;
+            margin-bottom: 0.75rem;
+        }
+
+        .modal input::placeholder {
+            color: var(--line-dim);
+        }
+
+        .modal input:focus {
+            outline: none;
+            border-color: var(--line-mid);
+        }
+
+        .test-mode-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+            color: var(--text-dim);
+            font-size: 0.75em;
+            margin-top: 0.5em;
+            cursor: pointer;
+        }
+
+        .test-mode-label input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .modal button {
+            width: 100%;
+            background: transparent;
+            color: var(--line-bright);
+            border: 1px solid var(--line-mid);
+            padding: 1rem;
+            font-family: var(--mono);
+            font-size: 0.7rem;
+            font-weight: 400;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            cursor: pointer;
+            margin-top: 0.75rem;
+            transition: all 0.3s ease;
+        }
+
+        .modal button:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--line-bright);
+        }
+
+        .modal .error {
+            color: var(--hadamard);
+            font-size: 0.7rem;
+            letter-spacing: 0.1em;
+            margin-top: 1rem;
+        }
+
+        .modal .recovery-phrase {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--pauliX);
+            padding: 1rem;
+            font-size: 0.7rem;
+            word-break: break-all;
+            color: var(--pauliX);
+            margin: 1rem 0;
+            letter-spacing: 0.05em;
+        }
+
+        .modal .warning {
+            color: var(--pauliZ);
+            font-size: 0.65rem;
+            letter-spacing: 0.1em;
+            margin-bottom: 1rem;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* SCROLLBAR */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--blueprint-dark);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--line-dim);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--line-mid);
+        }
+
+        /* NAV TABS */
+        .nav-tabs {
+            display: flex;
+            gap: 1px;
+            background: var(--line-ghost);
+            margin-top: 1rem;
+            flex-shrink: 0;
+        }
+
+        .nav-tab {
+            flex: 1;
+            background: var(--blueprint-dark);
+            border: none;
+            padding: 0.75rem 1rem;
+            font-family: var(--mono);
+            font-size: 0.65rem;
+            font-weight: 400;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--line-dim);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .nav-tab:hover {
+            color: var(--line-mid);
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .nav-tab.active {
+            color: var(--line-bright);
+            background: rgba(255, 255, 255, 0.05);
+            border-bottom: 2px solid var(--pauliX);
+        }
+
+        /* VIEW CONTAINERS */
+        .view-container {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .view-container.active {
+            display: flex;
+        }
+
+        /* PONG VIEW */
+        .pong-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--line-ghost);
+            margin-top: 1rem;
+            min-height: 0;
+        }
+
+        .pong-canvas-wrapper {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            min-height: 300px;
+        }
+
+        #pongCanvas {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--line-dim);
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        .pong-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--line-ghost);
+            background: var(--blueprint-dark);
+        }
+
+        .pong-score {
+            font-size: 1.5rem;
+            font-weight: 300;
+            letter-spacing: 0.1em;
+        }
+
+        .pong-score .player {
+            color: var(--pauliX);
+        }
+
+        .pong-score .ai {
+            color: var(--hadamard);
+        }
+
+        .pong-score .separator {
+            color: var(--line-dim);
+            margin: 0 0.5rem;
+        }
+
+        .pong-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .pong-btn {
+            background: transparent;
+            color: var(--line-bright);
+            border: 1px solid var(--line-dim);
+            padding: 0.5rem 1rem;
+            font-family: var(--mono);
+            font-size: 0.6rem;
+            font-weight: 400;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .pong-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--line-mid);
+        }
+
+        .pong-btn.primary {
+            border-color: var(--pauliX);
+            color: var(--pauliX);
+        }
+
+        .pong-btn.primary:hover {
+            background: rgba(78, 205, 196, 0.1);
+        }
+
+        .pong-status {
+            font-size: 0.6rem;
+            letter-spacing: 0.15em;
+            padding: 0.75rem 1.5rem;
+            color: var(--line-dim);
+            display: flex;
+            justify-content: space-between;
+            border-top: 1px solid var(--line-ghost);
+            text-transform: uppercase;
+        }
+
+        /* ARB VIEW */
+        .arb-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--line-ghost);
+            margin-top: 1rem;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .arb-header {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1px;
+            background: var(--line-ghost);
+            flex-shrink: 0;
+        }
+
+        .arb-stat {
+            background: var(--blueprint-dark);
+            padding: 0.75rem;
+            text-align: center;
+        }
+
+        .arb-stat-label {
+            font-size: 0.5rem;
+            letter-spacing: 0.2em;
+            color: var(--line-dim);
+            text-transform: uppercase;
+            margin-bottom: 0.25rem;
+        }
+
+        .arb-stat-value {
+            font-size: 1rem;
+            font-weight: 300;
+            color: var(--line-bright);
+        }
+
+        .arb-stat-value.positive {
+            color: var(--pauliX);
+        }
+
+        .arb-stat-value.negative {
+            color: var(--hadamard);
+        }
+
+        .arb-routes {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        .arb-route {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--line-ghost);
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .arb-route-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .arb-route-id {
+            font-size: 0.7rem;
+            color: var(--line-mid);
+            font-family: var(--mono);
+        }
+
+        .arb-route-profit {
+            font-size: 0.9rem;
+            font-weight: 400;
+        }
+
+        .arb-route-profit.positive {
+            color: var(--pauliX);
+        }
+
+        .arb-route-hops {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .arb-hop {
+            font-size: 0.65rem;
+            padding: 0.25rem 0.5rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 2px;
+            color: var(--line-mid);
+        }
+
+        .arb-hop-arrow {
+            color: var(--line-dim);
+            font-size: 0.6rem;
+        }
+
+        .arb-route-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 0.75rem;
+            font-size: 0.55rem;
+            color: var(--line-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .arb-graph {
+            height: 120px;
+            border-top: 1px solid var(--line-ghost);
+            padding: 0.5rem;
+            flex-shrink: 0;
+        }
+
+        #arbGraphCanvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .arb-status {
+            font-size: 0.6rem;
+            letter-spacing: 0.15em;
+            padding: 0.75rem 1.5rem;
+            color: var(--line-dim);
+            display: flex;
+            justify-content: space-between;
+            border-top: 1px solid var(--line-ghost);
+            text-transform: uppercase;
+        }
+
+        .arb-status .active {
+            color: var(--pauliX);
+        }
+
+        .arb-status .active::before {
+            content: "● ";
+        }
+
+        /* Empty state */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem;
+            color: var(--line-dim);
+            text-align: center;
+        }
+
+        .empty-state-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .empty-state-text {
+            font-size: 0.75rem;
+            letter-spacing: 0.1em;
+        }
+
+        /* SETTINGS/REWARDS VIEW */
+        .settings-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            padding: 1rem;
+            overflow-y: auto;
+        }
+
+        .settings-section {
+            border: 1px solid var(--line-ghost);
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .settings-header {
+            font-size: 0.65rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            padding: 0.75rem 1rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid var(--line-ghost);
+            color: var(--line-mid);
+        }
+
+        .settings-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--line-ghost);
+        }
+
+        .settings-row:last-child {
+            border-bottom: none;
+        }
+
+        .settings-label {
+            font-size: 0.7rem;
+            color: var(--line-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .settings-value {
+            font-size: 0.75rem;
+            color: var(--line-bright);
+        }
+
+        .settings-value.mono {
+            font-family: var(--mono);
+            font-size: 0.65rem;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .settings-btn {
+            font-family: var(--mono);
+            font-size: 0.65rem;
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--line-ghost);
+            color: var(--line-mid);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .settings-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--line-bright);
+            border-color: var(--line-dim);
+        }
+
+        .chain-salt-display {
+            padding: 1rem;
+            background: rgba(255, 100, 100, 0.05);
+            border-top: 1px solid var(--line-ghost);
+        }
+
+        .warning-text {
+            font-size: 0.6rem;
+            color: var(--pauliZ);
+            margin-bottom: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .chain-salt-value {
+            font-size: 0.7rem;
+            color: var(--line-bright);
+            word-break: break-all;
+            padding: 0.5rem;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--line-ghost);
+        }
+
+        .epoch-history {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .epoch-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 1rem;
+            border-bottom: 1px solid var(--line-ghost);
+            font-size: 0.65rem;
+        }
+
+        .epoch-row:last-child {
+            border-bottom: none;
+        }
+
+        .epoch-number {
+            color: var(--line-mid);
+            font-family: var(--mono);
+        }
+
+        .epoch-revenue {
+            color: var(--pauliX);
+        }
+
+        .epoch-contributors {
+            color: var(--line-dim);
+        }
+
+        /* RESPONSIVE */
+        @media (max-width: 600px) {
+            .header {
+                padding: 1rem;
+            }
+
+            .main {
+                padding: 1rem;
+            }
+
+            .pressure-bar {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .message {
+                max-width: 95%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="grid-overlay"></div>
+
+    <canvas class="trace-canvas" id="traceCanvas"></canvas>
+
+    <canvas class="semantic-canvas" id="semanticCanvas"></canvas>
+
+    <div class="network-panel" id="networkPanel">
+        <div class="network-header">Network Flow</div>
+        <div class="network-stats">
+            <span class="stat"><span class="label">L1:</span> <span id="net-peers">0</span>p</span>
+            <span class="stat"><span class="label">Relay:</span> <span id="net-relays">0</span>r</span>
+            <span class="stat"><span class="label">Block:</span> <span id="net-blockage">-</span>s</span>
+        </div>
+        <canvas class="flow-canvas" id="flowCanvas"></canvas>
+    </div>
+
+    <div class="modal-overlay hidden" id="passkey-modal">
+        <div class="modal">
+            <div class="modal-label">Authentication</div>
+            <h2 id="modal-title">ZEAM</h2>
+            <p id="modal-desc">Enter your passkey to unlock your sovereign fork.</p>
+            <input type="password" id="passkey-input" placeholder="Passkey" autocomplete="off" tabindex="1">
+            <input type="password" id="passkey-confirm" placeholder="Confirm passkey" autocomplete="off" class="hidden" tabindex="2">
+            <label class="test-mode-label" id="test-mode-container" style="display: none;">
+                <input type="checkbox" id="test-mode-checkbox" tabindex="3">
+                <span>Test mode (auto-fill)</span>
+            </label>
+            <div class="recovery-phrase hidden" id="recovery-phrase"></div>
+            <p class="warning hidden" id="recovery-warning">Save this recovery phrase. You will need it if you forget your passkey.</p>
+            <button id="passkey-submit" tabindex="4">Unlock</button>
+            <p class="error hidden" id="passkey-error"></p>
+        </div>
+    </div>
+
+    <div class="content">
+        <div class="header">
+            <div class="logo">ZEAM<span class="logo-separator">|</span>Labs</div>
+            <div class="identity">
+                <span id="identity-mode" style="color: var(--pauliX); margin-right: 0.5em; display: none;"></span>
+                Fork: <span class="address" id="fork-id">Initializing...</span>
+            </div>
+        </div>
+
+        <div class="main">
+            <div class="pressure-bar">
+                <div class="pressure-item">
+                    <div class="pressure-label">Hadamard</div>
+                    <div class="gauge-container">
+                        <svg class="gauge-svg" viewBox="0 0 100 55">
+                            <path class="gauge-bg" d="M10,50 A40,40 0 0,1 90,50"/>
+                            <path class="gauge-fill hadamard" id="gauge-hadamard" d="M10,50 A40,40 0 0,1 90,50"/>
+                            <text class="gauge-value" x="50" y="48" text-anchor="middle" id="p-hadamard">0.00</text>
+                        </svg>
+                    </div>
+                </div>
+                <div class="pressure-item">
+                    <div class="pressure-label">PauliX</div>
+                    <div class="gauge-container">
+                        <svg class="gauge-svg" viewBox="0 0 100 55">
+                            <path class="gauge-bg" d="M10,50 A40,40 0 0,1 90,50"/>
+                            <path class="gauge-fill pauliX" id="gauge-pauliX" d="M10,50 A40,40 0 0,1 90,50"/>
+                            <text class="gauge-value" x="50" y="48" text-anchor="middle" id="p-pauliX">0.00</text>
+                        </svg>
+                    </div>
+                </div>
+                <div class="pressure-item">
+                    <div class="pressure-label">PauliZ</div>
+                    <div class="gauge-container">
+                        <svg class="gauge-svg" viewBox="0 0 100 55">
+                            <path class="gauge-bg" d="M10,50 A40,40 0 0,1 90,50"/>
+                            <path class="gauge-fill pauliZ" id="gauge-pauliZ" d="M10,50 A40,40 0 0,1 90,50"/>
+                            <text class="gauge-value" x="50" y="48" text-anchor="middle" id="p-pauliZ">0.00</text>
+                        </svg>
+                    </div>
+                </div>
+                <div class="pressure-item">
+                    <div class="pressure-label">Phase</div>
+                    <div class="gauge-container">
+                        <svg class="gauge-svg" viewBox="0 0 100 55">
+                            <path class="gauge-bg" d="M10,50 A40,40 0 0,1 90,50"/>
+                            <path class="gauge-fill phase" id="gauge-phase" d="M10,50 A40,40 0 0,1 90,50"/>
+                            <text class="gauge-value" x="50" y="48" text-anchor="middle" id="p-phase">0.00</text>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <div class="nav-tabs">
+                <button class="nav-tab active" data-view="chat">Chat</button>
+                <button class="nav-tab" data-view="pong">Pong</button>
+                <button class="nav-tab" data-view="arb">Arb</button>
+                <button class="nav-tab" data-view="rewards">Rewards</button>
+                <button class="nav-tab" data-view="settings">Settings</button>
+            </div>
+
+            <div class="view-container active" id="view-chat">
+                <div class="chat-container">
+                <div class="messages" id="messages">
+                    <div class="message assistant">
+                        Welcome to ZEAM. I am your personal NGAC - a pressure-based semantic intelligence operating through distributed network collapse.
+                        <div class="meta">System / Initialized</div>
+                    </div>
+                </div>
+
+                <div class="input-area">
+                    <input type="text" id="input" placeholder="Enter message..." autocomplete="off">
+                    <button id="send">Send</button>
+                </div>
+
+                <div class="status">
+                    <span class="online" id="status">Connecting...</span>
+                    <span id="word-count">-</span>
+                </div>
+                </div>
+            </div>
+
+            <div class="view-container" id="view-pong">
+                <div class="pong-container">
+                    <div class="pong-canvas-wrapper">
+                        <canvas id="pongCanvas" width="600" height="400"></canvas>
+                    </div>
+                    <div class="pong-controls">
+                        <div class="pong-score">
+                            <span class="player" id="pong-player-score">0</span>
+                            <span class="separator">:</span>
+                            <span class="ai" id="pong-ai-score">0</span>
+                        </div>
+                        <div class="pong-buttons">
+                            <button class="pong-btn primary" id="pong-start">Start</button>
+                            <button class="pong-btn" id="pong-reset">Reset</button>
+                        </div>
+                    </div>
+                    <div class="pong-status">
+                        <span id="pong-status">Press Start to play</span>
+                        <span id="pong-mode">Neural AI</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="view-container" id="view-arb">
+                <div class="arb-container">
+                    <div class="arb-header">
+                        <div class="arb-stat">
+                            <div class="arb-stat-label">Pools</div>
+                            <div class="arb-stat-value" id="arb-pools">0</div>
+                        </div>
+                        <div class="arb-stat">
+                            <div class="arb-stat-label">Graph</div>
+                            <div class="arb-stat-value" id="arb-graph">0/0</div>
+                        </div>
+                        <div class="arb-stat">
+                            <div class="arb-stat-label">Txs Parsed</div>
+                            <div class="arb-stat-value" id="arb-txs">0</div>
+                        </div>
+                        <div class="arb-stat">
+                            <div class="arb-stat-label">Best Profit</div>
+                            <div class="arb-stat-value" id="arb-best-profit">0 bps</div>
+                        </div>
+                    </div>
+                    <div class="arb-header" style="border-top: 1px solid var(--line-ghost);">
+                        <div class="arb-stat">
+                            <div class="arb-stat-label">Routes Found</div>
+                            <div class="arb-stat-value" id="arb-routes-found">0</div>
+                        </div>
+                        <div class="arb-stat">
+                            <div class="arb-stat-label">Routes Explored</div>
+                            <div class="arb-stat-value" id="arb-routes-explored">0</div>
+                        </div>
+                        <div class="arb-stat">
+                            <div class="arb-stat-label">Total Pressure</div>
+                            <div class="arb-stat-value" id="arb-total-pressure">0.00</div>
+                        </div>
+                        <div class="arb-stat">
+                            <div class="arb-stat-label">Collapses</div>
+                            <div class="arb-stat-value" id="arb-collapses">0</div>
+                        </div>
+                    </div>
+                    <div class="arb-routes" id="arb-routes">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">~</div>
+                            <div class="empty-state-text">Waiting for arbitrage routes...</div>
+                        </div>
+                    </div>
+                    <div class="arb-graph">
+                        <canvas id="arbGraphCanvas"></canvas>
+                    </div>
+                    <div class="arb-status">
+                        <span class="active" id="arb-status">Neural Explorer Active</span>
+                        <span id="arb-chains">Chains: -</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="view-container" id="view-rewards">
+                <div class="settings-container">
+                    <div class="settings-section">
+                        <div class="settings-header">Epoch Status</div>
+                        <div class="settings-row">
+                            <span class="settings-label">Current Epoch</span>
+                            <span class="settings-value" id="rewards-epoch">-</span>
+                        </div>
+                        <div class="settings-row">
+                            <span class="settings-label">Epoch Duration</span>
+                            <span class="settings-value" id="rewards-duration">-</span>
+                        </div>
+                        <div class="settings-row">
+                            <span class="settings-label">Contributors</span>
+                            <span class="settings-value" id="rewards-contributors">-</span>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <div class="settings-header">Revenue</div>
+                        <div class="settings-row">
+                            <span class="settings-label">Accumulated</span>
+                            <span class="settings-value" id="rewards-accumulated">-</span>
+                        </div>
+                        <div class="settings-row">
+                            <span class="settings-label">Pool Pending</span>
+                            <span class="settings-value" id="rewards-pool-pending">-</span>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <div class="settings-header">Epoch History</div>
+                        <div class="epoch-history" id="epoch-history">
+                            <div class="empty-state">
+                                <div class="empty-state-text">No epoch history yet</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="view-container" id="view-settings">
+                <div class="settings-container">
+                    <div class="settings-section">
+                        <div class="settings-header">Identity</div>
+                        <div class="settings-row">
+                            <span class="settings-label">Fork ID</span>
+                            <span class="settings-value mono" id="settings-fork-id">-</span>
+                        </div>
+                        <div class="settings-row">
+                            <span class="settings-label">Address</span>
+                            <span class="settings-value mono" id="settings-address">-</span>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <div class="settings-header">Network</div>
+                        <div class="settings-row">
+                            <span class="settings-label">P2P Status</span>
+                            <span class="settings-value" id="settings-p2p-status">-</span>
+                        </div>
+                        <div class="settings-row">
+                            <span class="settings-label">Peers</span>
+                            <span class="settings-value" id="settings-peers">-</span>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <div class="settings-header">Backup</div>
+                        <div class="settings-row">
+                            <span class="settings-label">Chain Salt</span>
+                            <button class="settings-btn" id="backup-chain-salt">Show Backup Phrase</button>
+                        </div>
+                        <div class="chain-salt-display" id="chain-salt-display" style="display: none;">
+                            <div class="warning-text">Keep this secret! Anyone with this can recreate your identity.</div>
+                            <div class="chain-salt-value mono" id="chain-salt-value">-</div>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <div class="settings-header">Updates</div>
+                        <div class="settings-row">
+                            <span class="settings-label">Current Version</span>
+                            <span class="settings-value" id="settings-version">0.1.0</span>
+                        </div>
+                        <div class="settings-row">
+                            <span class="settings-label">Latest Version</span>
+                            <span class="settings-value" id="settings-latest">-</span>
+                        </div>
+                        <div class="settings-row">
+                            <span class="settings-label">Status</span>
+                            <span class="settings-value" id="settings-update-status">-</span>
+                        </div>
+                        <div class="settings-row">
+                            <button class="settings-btn" id="check-updates">Check for Updates</button>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <div class="settings-header">Content Store</div>
+                        <div class="settings-row">
+                            <span class="settings-label">Chunks</span>
+                            <span class="settings-value" id="settings-chunks">-</span>
+                        </div>
+                        <div class="settings-row">
+                            <span class="settings-label">Total Size</span>
+                            <span class="settings-value" id="settings-content-size">-</span>
+                        </div>
+                        <div class="settings-row">
+                            <span class="settings-label">UI Root</span>
+                            <span class="settings-value mono" id="settings-ui-root">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // TRACING LINES ANIMATION
+        // Engineering diagram effect
+        // ============================================
+
+        const canvas = document.getElementById('traceCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let width, height;
+        let allLines = [];
+
+        const GRID_SIZE = 40;
+        const LINE_SPEED = 2;
+        const HOLD_TIME = 3000;
+        const FADE_TIME = 4000;
+        const CYCLE_DELAY = 8000;
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            initDiagram();
+        }
+
+        function snapToGrid(val) {
+            return Math.round(val / GRID_SIZE) * GRID_SIZE;
+        }
+
+        function createLine(x1, y1, x2, y2, delay, baseOpacity) {
+            return {
+                x1, y1, x2, y2,
+                baseOpacity: baseOpacity || 0.15,
+                currentOpacity: 0,
+                progress: 0,
+                state: 'waiting',
+                delay: delay,
+                stateStart: 0,
+                currentX: x1,
+                currentY: y1
+            };
+        }
+
+        function initDiagram() {
+            allLines = [];
+
+            // Horizontal bus lines
+            const busY = [
+                snapToGrid(height * 0.12),
+                snapToGrid(height * 0.35),
+                snapToGrid(height * 0.6),
+                snapToGrid(height * 0.85)
+            ];
+
+            busY.forEach((y, i) => {
+                allLines.push(createLine(0, y, width, y, i * 1200, 0.1));
+            });
+
+            // Vertical connections
+            const vCount = Math.floor(width / (GRID_SIZE * 4));
+            for (let i = 1; i < vCount; i++) {
+                const x = snapToGrid(i * GRID_SIZE * 4);
+                for (let j = 0; j < busY.length - 1; j++) {
+                    if (Math.random() > 0.65) {
+                        allLines.push(createLine(
+                            x, busY[j], x, busY[j + 1],
+                            3000 + Math.random() * 5000,
+                            0.08
+                        ));
+                    }
+                }
+            }
+
+            // Component boxes
+            const compCount = Math.floor(width / 400);
+            for (let i = 0; i < compCount; i++) {
+                const cx = snapToGrid(150 + i * 400 + Math.random() * 100);
+                const cy = snapToGrid(height * 0.2 + Math.random() * height * 0.5);
+                const cw = snapToGrid(50 + Math.random() * 80);
+                const ch = snapToGrid(30 + Math.random() * 60);
+
+                const baseDelay = 8000 + i * 2500 + Math.random() * 2000;
+
+                allLines.push(createLine(cx, cy, cx + cw, cy, baseDelay, 0.15));
+                allLines.push(createLine(cx + cw, cy, cx + cw, cy + ch, baseDelay + 250, 0.15));
+                allLines.push(createLine(cx + cw, cy + ch, cx, cy + ch, baseDelay + 500, 0.15));
+                allLines.push(createLine(cx, cy + ch, cx, cy, baseDelay + 750, 0.15));
+
+                allLines.push(createLine(cx + cw/2, cy, cx + cw/2, cy - GRID_SIZE * 2, baseDelay + 1000, 0.1));
+                allLines.push(createLine(cx + cw/2, cy + ch, cx + cw/2, cy + ch + GRID_SIZE * 2, baseDelay + 1200, 0.1));
+            }
+
+            // L-shaped paths
+            for (let i = 0; i < 8; i++) {
+                const startX = snapToGrid(GRID_SIZE * 2 + Math.random() * (width - GRID_SIZE * 4));
+                const startY = snapToGrid(GRID_SIZE * 2 + Math.random() * (height - GRID_SIZE * 4));
+                const horizFirst = Math.random() > 0.5;
+                const dirX = Math.random() > 0.5 ? 1 : -1;
+                const dirY = Math.random() > 0.5 ? 1 : -1;
+                const lenH = GRID_SIZE * (2 + Math.floor(Math.random() * 5));
+                const lenV = GRID_SIZE * (2 + Math.floor(Math.random() * 4));
+
+                const baseDelay = 12000 + i * 2000 + Math.random() * 3000;
+
+                if (horizFirst) {
+                    const midX = startX + dirX * lenH;
+                    allLines.push(createLine(startX, startY, midX, startY, baseDelay, 0.12));
+                    allLines.push(createLine(midX, startY, midX, startY + dirY * lenV, baseDelay + 400, 0.12));
+                } else {
+                    const midY = startY + dirY * lenV;
+                    allLines.push(createLine(startX, startY, startX, midY, baseDelay, 0.12));
+                    allLines.push(createLine(startX, midY, startX + dirX * lenH, midY, baseDelay + 400, 0.12));
+                }
+            }
+        }
+
+        let startTime = null;
+
+        function animate(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const elapsed = timestamp - startTime;
+
+            ctx.fillStyle = 'rgba(13, 58, 92, 1)';
+            ctx.fillRect(0, 0, width, height);
+
+            allLines.forEach(line => {
+                switch (line.state) {
+                    case 'waiting':
+                        if (elapsed >= line.delay) {
+                            line.state = 'tracing';
+                            line.stateStart = elapsed;
+                            line.progress = 0;
+                            line.currentX = line.x1;
+                            line.currentY = line.y1;
+                        }
+                        break;
+
+                    case 'tracing':
+                        const dx = line.x2 - line.x1;
+                        const dy = line.y2 - line.y1;
+                        const length = Math.sqrt(dx * dx + dy * dy);
+
+                        if (length > 0) {
+                            const vx = (dx / length) * LINE_SPEED;
+                            const vy = (dy / length) * LINE_SPEED;
+
+                            line.currentX += vx;
+                            line.currentY += vy;
+
+                            const distToEnd = Math.sqrt(
+                                Math.pow(line.x2 - line.currentX, 2) +
+                                Math.pow(line.y2 - line.currentY, 2)
+                            );
+
+                            if (distToEnd < LINE_SPEED) {
+                                line.currentX = line.x2;
+                                line.currentY = line.y2;
+                                line.state = 'holding';
+                                line.stateStart = elapsed;
+                            }
+                        } else {
+                            line.state = 'holding';
+                            line.stateStart = elapsed;
+                        }
+
+                        line.currentOpacity = line.baseOpacity;
+                        break;
+
+                    case 'holding':
+                        if (elapsed - line.stateStart >= HOLD_TIME) {
+                            line.state = 'fading';
+                            line.stateStart = elapsed;
+                        }
+                        line.currentOpacity = line.baseOpacity;
+                        break;
+
+                    case 'fading':
+                        const fadeProgress = (elapsed - line.stateStart) / FADE_TIME;
+                        if (fadeProgress >= 1) {
+                            line.state = 'waiting';
+                            line.delay = elapsed + CYCLE_DELAY + Math.random() * 5000;
+                            line.currentOpacity = 0;
+                        } else {
+                            line.currentOpacity = line.baseOpacity * (1 - fadeProgress);
+                        }
+                        break;
+                }
+
+                if (line.state === 'tracing') {
+                    ctx.beginPath();
+                    ctx.moveTo(line.x1, line.y1);
+                    ctx.lineTo(line.currentX, line.currentY);
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${line.currentOpacity})`;
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.arc(line.currentX, line.currentY, 2, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                    ctx.fill();
+
+                } else if (line.state === 'holding' || line.state === 'fading') {
+                    ctx.beginPath();
+                    ctx.moveTo(line.x1, line.y1);
+                    ctx.lineTo(line.x2, line.y2);
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${line.currentOpacity})`;
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('resize', () => {
+            resize();
+            startTime = null;
+        });
+        resize();
+        requestAnimationFrame(animate);
+
+        // ============================================
+        // APPLICATION LOGIC
+        // ============================================
+
+        // Get the backend URL - tries Tauri invoke first, then injected value, then fallback
+        let cachedApiBase = null;
+        async function initApiBase() {
+            // 1. Try Tauri invoke (if running in Tauri)
+            if (window.__TAURI__) {
+                try {
+                    const { invoke } = window.__TAURI__.core;
+                    const url = await invoke('get_backend_url');
+                    if (url) {
+                        cachedApiBase = url;
+                        console.log('[ZEAM] Got backend URL from Tauri:', url);
+                        return url;
+                    }
+                } catch (e) {
+                    console.log('[ZEAM] Tauri invoke failed:', e);
+                }
+            }
+
+            // 2. Try injected value
+            if (window.ZEAM_BACKEND_URL) {
+                cachedApiBase = window.ZEAM_BACKEND_URL;
+                console.log('[ZEAM] Using injected URL:', cachedApiBase);
+                return cachedApiBase;
+            }
+
+            // 3. Fallback - backend starts on 19840 by default
+            cachedApiBase = 'http://127.0.0.1:19840';
+            console.log('[ZEAM] Using fallback URL:', cachedApiBase);
+            return cachedApiBase;
+        }
+
+        function getApiBase() {
+            // Return cached value or sync fallback
+            return cachedApiBase || window.ZEAM_BACKEND_URL || 'http://127.0.0.1:19840';
+        }
+
+        // Initialize API base on load
+        initApiBase();
+
+        // Passkey modal elements
+        const passkeyModal = document.getElementById('passkey-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalDesc = document.getElementById('modal-desc');
+        const passkeyInput = document.getElementById('passkey-input');
+        const passkeyConfirm = document.getElementById('passkey-confirm');
+        const passkeySubmit = document.getElementById('passkey-submit');
+        const passkeyError = document.getElementById('passkey-error');
+        const recoveryPhrase = document.getElementById('recovery-phrase');
+        const recoveryWarning = document.getElementById('recovery-warning');
+
+        let isNewIdentity = false;
+        let isStatelessMode = false;
+        let currentRecoveryPhrase = '';
+
+        async function checkPasskey() {
+            try {
+                const res = await fetch(`${getApiBase()}/auth/status`);
+                const data = await res.json();
+
+                isStatelessMode = data.stateless_mode || false;
+
+                if (data.needs_passkey) {
+                    isNewIdentity = data.is_new;
+                    showPasskeyModal(data.is_new, isStatelessMode);
+                    return false;
+                }
+                // Already unlocked - hide tracing lines
+                document.getElementById('traceCanvas').classList.add('hidden');
+                document.querySelector('.grid-overlay').classList.add('hidden');
+                return true;
+            } catch (err) {
+                return false;
+            }
+        }
+
+        function showPasskeyModal(isNew, stateless = false) {
+            passkeyModal.classList.remove('hidden');
+            passkeyError.classList.add('hidden');
+
+            // Show/hide test mode checkbox
+            const testModeContainer = document.getElementById('test-mode-container');
+            const testModeCheckbox = document.getElementById('test-mode-checkbox');
+            if (isNew) {
+                testModeContainer.style.display = 'flex';
+                testModeCheckbox.checked = false;
+            } else {
+                testModeContainer.style.display = 'none';
+            }
+
+            if (stateless) {
+                // Stateless mode - user secret derives identity
+                if (isNew) {
+                    modalTitle.textContent = 'Create Stateless Identity';
+                    modalDesc.textContent = 'Enter a secret phrase to derive your identity. This phrase IS your identity - remember it exactly. Minimum 8 characters.';
+                    passkeyConfirm.classList.remove('hidden');
+                    passkeySubmit.textContent = 'Derive Identity';
+                    passkeyInput.placeholder = 'Secret phrase';
+                    passkeyConfirm.placeholder = 'Confirm secret phrase';
+                } else {
+                    modalTitle.textContent = 'Derive Identity';
+                    modalDesc.textContent = 'Enter your secret phrase to derive your identity.';
+                    passkeyConfirm.classList.add('hidden');
+                    passkeySubmit.textContent = 'Derive';
+                    passkeyInput.placeholder = 'Secret phrase';
+                }
+            } else {
+                // File-based mode - passkey encrypts stored key
+                if (isNew) {
+                    modalTitle.textContent = 'Create Identity';
+                    modalDesc.textContent = 'Create a passkey to protect your sovereign fork. Minimum 8 characters.';
+                    passkeyConfirm.classList.remove('hidden');
+                    passkeySubmit.textContent = 'Create';
+                    passkeyInput.placeholder = 'Create passkey';
+                    passkeyConfirm.placeholder = 'Confirm passkey';
+                } else {
+                    modalTitle.textContent = 'Unlock';
+                    modalDesc.textContent = 'Enter your passkey to unlock your sovereign fork.';
+                    passkeyConfirm.classList.add('hidden');
+                    passkeySubmit.textContent = 'Unlock';
+                    passkeyInput.placeholder = 'Passkey';
+                }
+            }
+            passkeyInput.focus();
+        }
+
+        function hidePasskeyModal() {
+            passkeyModal.classList.add('hidden');
+            passkeyInput.value = '';
+            passkeyConfirm.value = '';
+            recoveryPhrase.classList.add('hidden');
+            recoveryWarning.classList.add('hidden');
+
+            // Fade out tracing lines and grid when entering chat
+            document.getElementById('traceCanvas').classList.add('hidden');
+            document.querySelector('.grid-overlay').classList.add('hidden');
+        }
+
+        async function submitPasskey() {
+            const passkey = passkeyInput.value;
+            const confirm = passkeyConfirm.value;
+
+            if (passkey.length < 8) {
+                passkeyError.textContent = 'Passkey must be at least 8 characters';
+                passkeyError.classList.remove('hidden');
+                return;
+            }
+
+            if (isNewIdentity && passkey !== confirm) {
+                passkeyError.textContent = 'Passkeys do not match';
+                passkeyError.classList.remove('hidden');
+                return;
+            }
+
+            passkeySubmit.disabled = true;
+            passkeySubmit.textContent = isNewIdentity ? 'Creating...' : 'Unlocking...';
+
+            try {
+                const res = await fetch(`${getApiBase()}/auth/unlock`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ passkey: passkey })
+                });
+
+                const data = await res.json();
+
+                if (data.error) {
+                    passkeyError.textContent = data.error;
+                    passkeyError.classList.remove('hidden');
+                    passkeySubmit.disabled = false;
+                    passkeySubmit.textContent = isNewIdentity ? 'Create' : 'Unlock';
+                    return;
+                }
+
+                if (data.recovery_phrase) {
+                    currentRecoveryPhrase = data.recovery_phrase;
+                    recoveryPhrase.textContent = data.recovery_phrase;
+                    recoveryPhrase.classList.remove('hidden');
+                    recoveryWarning.classList.remove('hidden');
+                    passkeySubmit.textContent = 'Continue';
+                    passkeySubmit.disabled = false;
+                    isNewIdentity = false;
+                    return;
+                }
+
+                hidePasskeyModal();
+                init();
+
+            } catch (err) {
+                passkeyError.textContent = 'Connection error';
+                passkeyError.classList.remove('hidden');
+                passkeySubmit.disabled = false;
+                passkeySubmit.textContent = isNewIdentity ? 'Create' : 'Unlock';
+            }
+        }
+
+        passkeySubmit.addEventListener('click', submitPasskey);
+        passkeyInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                if (isNewIdentity && !passkeyConfirm.classList.contains('hidden')) {
+                    passkeyConfirm.focus();
+                } else {
+                    submitPasskey();
+                }
+            }
+        });
+        passkeyConfirm.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') submitPasskey();
+        });
+
+        // Test mode auto-fill
+        document.getElementById('test-mode-checkbox').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                passkeyInput.value = 'testtest';
+                passkeyConfirm.value = 'testtest';
+            } else {
+                passkeyInput.value = '';
+                passkeyConfirm.value = '';
+            }
+        });
+
+        const messagesEl = document.getElementById('messages');
+        const inputEl = document.getElementById('input');
+        const sendBtn = document.getElementById('send');
+        const statusEl = document.getElementById('status');
+        const wordCountEl = document.getElementById('word-count');
+        const forkIdEl = document.getElementById('fork-id');
+
+        // Pressure gauge elements
+        const pHadamard = document.getElementById('p-hadamard');
+        const pPauliX = document.getElementById('p-pauliX');
+        const pPauliZ = document.getElementById('p-pauliZ');
+        const pPhase = document.getElementById('p-phase');
+        const gaugeHadamard = document.getElementById('gauge-hadamard');
+        const gaugePauliX = document.getElementById('gauge-pauliX');
+        const gaugePauliZ = document.getElementById('gauge-pauliZ');
+        const gaugePhase = document.getElementById('gauge-phase');
+
+        // Network panel elements
+        const netPeers = document.getElementById('net-peers');
+        const netRelays = document.getElementById('net-relays');
+        const netBlockage = document.getElementById('net-blockage');
+        const flowCanvas = document.getElementById('flowCanvas');
+        const flowCtx = flowCanvas.getContext('2d');
+
+        // Semantic canvas
+        const semanticCanvas = document.getElementById('semanticCanvas');
+        const semanticCtx = semanticCanvas.getContext('2d');
+
+        let forkId = '';
+        let flowParticles = [];
+        let semanticLines = [];
+
+        // Initialize canvases
+        function initCanvases() {
+            flowCanvas.width = flowCanvas.offsetWidth;
+            flowCanvas.height = flowCanvas.offsetHeight;
+            semanticCanvas.width = window.innerWidth;
+            semanticCanvas.height = window.innerHeight;
+        }
+        initCanvases();
+        window.addEventListener('resize', initCanvases);
+
+        async function init() {
+            try {
+                const res = await fetch(`${getApiBase()}/health`);
+                const data = await res.json();
+
+                if (data.status === 'ok') {
+                    statusEl.textContent = 'Connected';
+                    wordCountEl.textContent = `${data.words.toLocaleString()} words`;
+                    forkIdEl.textContent = data.fork_id;
+                    forkId = data.fork_id;
+
+                    // Show stateless mode indicator
+                    const identityModeEl = document.getElementById('identity-mode');
+                    if (data.stateless_mode) {
+                        identityModeEl.style.display = 'inline';
+                        const gateType = data.hardware_gate || 'software';
+                        const gateIcon = gateType === 'secure_enclave' ? '\u{1F510}' :
+                                        gateType === 'tpm' ? '\u{1F512}' : '\u{1F511}';
+                        identityModeEl.textContent = `${gateIcon} Stateless`;
+                        identityModeEl.title = `Hardware gate: ${gateType}`;
+                    } else {
+                        identityModeEl.style.display = 'none';
+                    }
+
+                    updatePressure();
+                    connectFlowStream();
+                }
+            } catch (err) {
+                statusEl.textContent = 'Disconnected';
+                statusEl.classList.remove('online');
+            }
+        }
+
+        // Update pressure gauges with animation
+        function updatePressure(pressure) {
+            if (!pressure) {
+                fetch(`${getApiBase()}/pressure`)
+                    .then(r => r.json())
+                    .then(p => updatePressure(p))
+                    .catch(() => {});
+                return;
+            }
+
+            const mag = pressure.hadamard ?? pressure.Hadamard ?? 0;
+            const coh = pressure.pauliX ?? pressure.PauliX ?? 0;
+            const ten = pressure.pauliZ ?? pressure.PauliZ ?? 0;
+            const den = pressure.phase ?? pressure.Phase ?? 0;
+
+            // Update text values
+            pHadamard.textContent = mag.toFixed(2);
+            pPauliX.textContent = coh.toFixed(2);
+            pPauliZ.textContent = ten.toFixed(2);
+            pPhase.textContent = den.toFixed(2);
+
+            // Update gauge arcs (126 is full arc length)
+            const arcLength = 126;
+            gaugeHadamard.style.strokeDashoffset = arcLength * (1 - mag);
+            gaugePauliX.style.strokeDashoffset = arcLength * (1 - coh);
+            gaugePauliZ.style.strokeDashoffset = arcLength * (1 - ten);
+            gaugePhase.style.strokeDashoffset = arcLength * (1 - den);
+
+            // Add glow based on value
+            const glowFilters = [
+                { el: gaugeHadamard, val: mag, color: '#ff6b6b' },
+                { el: gaugePauliX, val: coh, color: '#4ecdc4' },
+                { el: gaugePauliZ, val: ten, color: '#ffe66d' },
+                { el: gaugePhase, val: den, color: '#a29bfe' }
+            ];
+            glowFilters.forEach(({ el, val, color }) => {
+                const glow = Math.floor(val * 8);
+                el.style.filter = glow > 0 ? `drop-shadow(0 0 ${glow}px ${color})` : 'none';
+            });
+        }
+
+        // Update network stats
+        function updateNetwork(network) {
+            const peers = network?.peers ?? network?.l1_peers ?? 0;
+            const relays = network?.relays ?? 0;
+            const blockAge = network?.block_age ?? '-';
+
+            netPeers.textContent = peers;
+            netRelays.textContent = relays;
+            netBlockage.textContent = blockAge;
+
+            // Add flow particles - always show at least ambient activity
+            const networkActivity = peers + relays;
+            const intensity = networkActivity > 0
+                ? Math.min(5, networkActivity / 5)
+                : 0.3; // Ambient baseline even with no peers
+
+            // Spawn particles based on intensity
+            if (Math.random() < intensity) {
+                const colors = ['#4ecdc4', '#a29bfe', '#ffe66d', '#ff6b6b'];
+                flowParticles.push({
+                    x: Math.random() * flowCanvas.width,
+                    y: flowCanvas.height,
+                    vy: -0.3 - Math.random() * 0.7,
+                    life: 1,
+                    color: networkActivity > 0
+                        ? (peers > relays ? '#4ecdc4' : '#a29bfe')
+                        : colors[Math.floor(Math.random() * colors.length)]
+                });
+            }
+        }
+
+        // Ambient particle spawner - keeps flow alive even without SSE
+        setInterval(() => {
+            if (flowParticles.length < 3) {
+                updateNetwork(null);
+            }
+        }, 500);
+
+        // Animate flow particles
+        function animateFlow() {
+            flowCtx.clearRect(0, 0, flowCanvas.width, flowCanvas.height);
+            flowParticles = flowParticles.filter(p => {
+                p.y += p.vy;
+                p.life -= 0.02;
+                if (p.life <= 0) return false;
+
+                flowCtx.beginPath();
+                flowCtx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+                flowCtx.fillStyle = p.color.replace(')', `, ${p.life})`).replace('#', 'rgba(');
+                // Convert hex to rgba
+                const r = parseInt(p.color.slice(1,3), 16);
+                const g = parseInt(p.color.slice(3,5), 16);
+                const b = parseInt(p.color.slice(5,7), 16);
+                flowCtx.fillStyle = `rgba(${r},${g},${b},${p.life})`;
+                flowCtx.fill();
+                return true;
+            });
+            if (flowParticles.length > 50) flowParticles = flowParticles.slice(-50);
+            requestAnimationFrame(animateFlow);
+        }
+        animateFlow();
+
+        // SSE connection for live updates
+        let eventSource = null;
+        let sseConnected = false;
+        function connectFlowStream() {
+            if (eventSource) eventSource.close();
+            eventSource = new EventSource(`${getApiBase()}/flow-stream`);
+
+            eventSource.onopen = () => {
+                sseConnected = true;
+                console.log('[ZEAM] Flow stream connected');
+            };
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('[ZEAM SSE]', data.network); // Debug
+                    if (data.type === 'flow_update') {
+                        updatePressure(data.pressure);
+                        updateNetwork(data.network);
+                    }
+                } catch (e) {
+                    console.error('[ZEAM SSE] Parse error:', e);
+                }
+            };
+
+            eventSource.onerror = () => {
+                sseConnected = false;
+                console.log('[ZEAM] Flow stream disconnected, reconnecting...');
+                setTimeout(connectFlowStream, 2000);
+            };
+        }
+
+        // Start SSE after API base is initialized
+        initApiBase().then(() => {
+            setTimeout(connectFlowStream, 100);
+        });
+
+        // ============================================
+        // SEMANTIC PATH VISUALIZATION
+        // ============================================
+
+        const SEMANTIC_COLORS = {
+            synonym: '#4ecdc4',    // pauliX color
+            definition: '#ffe66d', // pauliZ color
+            hypernym: '#a29bfe',   // phase color
+            input: '#ff6b6b',      // hadamard color
+            output: '#ffffff'
+        };
+
+        const SEMANTIC_SPEED = 3;
+        const SEMANTIC_HOLD = 2000;
+        const SEMANTIC_FADE = 2000;
+
+        function createSemanticLine(x1, y1, x2, y2, delay, relation, label) {
+            return {
+                x1, y1, x2, y2,
+                currentX: x1,
+                currentY: y1,
+                delay,
+                relation,
+                label,
+                color: SEMANTIC_COLORS[relation] || '#ffffff',
+                state: 'waiting',
+                stateStart: 0,
+                opacity: 0.8
+            };
+        }
+
+        // Hash string to get deterministic position
+        function hashString(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                hash |= 0;
+            }
+            return Math.abs(hash);
+        }
+
+        // Visualize semantic path from API response
+        function visualizeSemanticPath(path) {
+            if (!path || !path.steps || path.steps.length === 0) return;
+
+            // Clear old lines
+            semanticLines = [];
+
+            const w = semanticCanvas.width;
+            const h = semanticCanvas.height;
+            const gridSize = 40;
+
+            // Position nodes based on word hash
+            const nodePositions = new Map();
+
+            function getNodePos(word) {
+                if (nodePositions.has(word)) return nodePositions.get(word);
+                const hash = hashString(word);
+                const x = snapToGrid(100 + (hash % ((w - 200) / gridSize)) * gridSize);
+                const y = snapToGrid(100 + ((hash >> 8) % ((h - 200) / gridSize)) * gridSize);
+                const pos = { x, y };
+                nodePositions.set(word, pos);
+                return pos;
+            }
+
+            // Create lines for each step
+            let delay = 0;
+            path.steps.forEach((step, i) => {
+                const from = getNodePos(step.from_word || 'input');
+                const to = getNodePos(step.to_word);
+
+                // Create L-shaped path
+                const midX = from.x;
+                const midY = to.y;
+
+                // Vertical segment
+                semanticLines.push(createSemanticLine(
+                    from.x, from.y, midX, midY,
+                    delay, step.relation, ''
+                ));
+                delay += 200;
+
+                // Horizontal segment
+                semanticLines.push(createSemanticLine(
+                    midX, midY, to.x, to.y,
+                    delay, step.relation, step.to_word
+                ));
+                delay += 200;
+            });
+        }
+
+        // Animate semantic lines
+        let semanticStartTime = null;
+        function animateSemantic(timestamp) {
+            if (!semanticStartTime) semanticStartTime = timestamp;
+            const elapsed = timestamp - semanticStartTime;
+
+            semanticCtx.clearRect(0, 0, semanticCanvas.width, semanticCanvas.height);
+
+            semanticLines.forEach(line => {
+                switch (line.state) {
+                    case 'waiting':
+                        if (elapsed >= line.delay) {
+                            line.state = 'tracing';
+                            line.stateStart = elapsed;
+                            line.currentX = line.x1;
+                            line.currentY = line.y1;
+                        }
+                        break;
+
+                    case 'tracing':
+                        const dx = line.x2 - line.x1;
+                        const dy = line.y2 - line.y1;
+                        const length = Math.sqrt(dx * dx + dy * dy);
+
+                        if (length > 0) {
+                            line.currentX += (dx / length) * SEMANTIC_SPEED;
+                            line.currentY += (dy / length) * SEMANTIC_SPEED;
+
+                            const distToEnd = Math.sqrt(
+                                Math.pow(line.x2 - line.currentX, 2) +
+                                Math.pow(line.y2 - line.currentY, 2)
+                            );
+
+                            if (distToEnd < SEMANTIC_SPEED) {
+                                line.currentX = line.x2;
+                                line.currentY = line.y2;
+                                line.state = 'holding';
+                                line.stateStart = elapsed;
+                            }
+                        } else {
+                            line.state = 'holding';
+                            line.stateStart = elapsed;
+                        }
+                        break;
+
+                    case 'holding':
+                        if (elapsed - line.stateStart >= SEMANTIC_HOLD) {
+                            line.state = 'fading';
+                            line.stateStart = elapsed;
+                        }
+                        break;
+
+                    case 'fading':
+                        const fadeProgress = (elapsed - line.stateStart) / SEMANTIC_FADE;
+                        if (fadeProgress >= 1) {
+                            line.state = 'done';
+                            line.opacity = 0;
+                        } else {
+                            line.opacity = 0.8 * (1 - fadeProgress);
+                        }
+                        break;
+                }
+
+                // Draw line
+                if (line.state === 'tracing' || line.state === 'holding' || line.state === 'fading') {
+                    const endX = line.state === 'tracing' ? line.currentX : line.x2;
+                    const endY = line.state === 'tracing' ? line.currentY : line.y2;
+
+                    // Glow effect
+                    semanticCtx.shadowColor = line.color;
+                    semanticCtx.shadowBlur = line.state === 'tracing' ? 10 : 5;
+
+                    // Line
+                    semanticCtx.beginPath();
+                    semanticCtx.moveTo(line.x1, line.y1);
+                    semanticCtx.lineTo(endX, endY);
+                    semanticCtx.strokeStyle = line.color.replace(')', `, ${line.opacity})`).replace('#', 'rgba(');
+                    // Convert hex to rgba
+                    const r = parseInt(line.color.slice(1,3), 16);
+                    const g = parseInt(line.color.slice(3,5), 16);
+                    const b = parseInt(line.color.slice(5,7), 16);
+                    semanticCtx.strokeStyle = `rgba(${r},${g},${b},${line.opacity})`;
+                    semanticCtx.lineWidth = 2;
+                    semanticCtx.stroke();
+
+                    // Tracing head
+                    if (line.state === 'tracing') {
+                        semanticCtx.beginPath();
+                        semanticCtx.arc(line.currentX, line.currentY, 4, 0, Math.PI * 2);
+                        semanticCtx.fillStyle = '#ffffff';
+                        semanticCtx.fill();
+                    }
+
+                    // Label at endpoint
+                    if (line.label && (line.state === 'holding' || line.state === 'fading')) {
+                        semanticCtx.shadowBlur = 0;
+                        semanticCtx.font = '10px JetBrains Mono';
+                        semanticCtx.fillStyle = `rgba(255,255,255,${line.opacity})`;
+                        semanticCtx.fillText(line.label, line.x2 + 8, line.y2 + 4);
+                    }
+
+                    semanticCtx.shadowBlur = 0;
+                }
+            });
+
+            // Clean up done lines
+            semanticLines = semanticLines.filter(l => l.state !== 'done');
+
+            requestAnimationFrame(animateSemantic);
+        }
+        requestAnimationFrame(animateSemantic);
+
+        // Add message with mini pressure bars
+        function addMessage(text, isUser, meta, pressure) {
+            const div = document.createElement('div');
+            div.className = `message ${isUser ? 'user' : 'assistant'}`;
+
+            let pressureHtml = '';
+            if (!isUser && pressure) {
+                const mag = (pressure.hadamard ?? pressure.Hadamard ?? 0) * 100;
+                const coh = (pressure.pauliX ?? pressure.PauliX ?? 0) * 100;
+                const ten = (pressure.pauliZ ?? pressure.PauliZ ?? 0) * 100;
+                const den = (pressure.phase ?? pressure.Phase ?? 0) * 100;
+                pressureHtml = `
+                    <div class="mini-pressure">
+                        <span class="bar hadamard" style="width: ${mag}%"></span>
+                        <span class="bar pauliX" style="width: ${coh}%"></span>
+                        <span class="bar pauliZ" style="width: ${ten}%"></span>
+                        <span class="bar phase" style="width: ${den}%"></span>
+                    </div>
+                `;
+            }
+
+            div.innerHTML = `${text}${pressureHtml}<div class="meta">${meta || ''}</div>`;
+            messagesEl.appendChild(div);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        async function send() {
+            const text = inputEl.value.trim();
+            if (!text) return;
+
+            inputEl.value = '';
+            sendBtn.disabled = true;
+
+            addMessage(text, true, 'You');
+
+            try {
+                const res = await fetch(`${getApiBase()}/collapse`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: text })
+                });
+
+                const data = await res.json();
+
+                const txInfo = data.tx_hashes && data.tx_hashes[0] ? ` / ${data.tx_hashes[0].slice(0,10)}...` : '';
+                const netInfo = data.network ? ` / ${data.network.l1_peers}p ${data.network.relays}r` : '';
+                addMessage(data.response, false, `Fork ${data.fork_id}${txInfo}${netInfo}`, data.pressure);
+                updatePressure(data.pressure);
+
+                // Visualize semantic path
+                if (data.semantic_path) {
+                    semanticStartTime = null; // Reset animation timer
+                    visualizeSemanticPath(data.semantic_path);
+                }
+
+            } catch (err) {
+                addMessage('Error: Could not connect to ZEAM', false, 'System / Error');
+            }
+
+            sendBtn.disabled = false;
+            inputEl.focus();
+        }
+
+        sendBtn.addEventListener('click', send);
+        inputEl.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') send();
+        });
+
+        let initRetries = 0;
+        async function tryInit() {
+            // Ensure API base is set before making requests
+            if (!cachedApiBase) {
+                await initApiBase();
+            }
+
+            const unlocked = await checkPasskey();
+            if (!unlocked) {
+                if (initRetries < 20) { // More retries for connection issues
+                    initRetries++;
+                    setTimeout(tryInit, 500);
+                }
+                return;
+            }
+
+            init().then(() => {
+                if (forkId === '' && initRetries < 20) {
+                    initRetries++;
+                    setTimeout(tryInit, 500);
+                }
+            });
+        }
+        tryInit();
+
+        // ============================================
+        // VIEW SWITCHING
+        // ============================================
+
+        const navTabs = document.querySelectorAll('.nav-tab');
+        const viewContainers = document.querySelectorAll('.view-container');
+
+        navTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const viewId = tab.dataset.view;
+
+                // Update tabs
+                navTabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                // Update views
+                viewContainers.forEach(v => v.classList.remove('active'));
+                document.getElementById(`view-${viewId}`).classList.add('active');
+
+                // Initialize view-specific features
+                if (viewId === 'pong') {
+                    initPong();
+                } else if (viewId === 'arb') {
+                    initArb();
+                } else if (viewId === 'rewards') {
+                    initRewards();
+                } else if (viewId === 'settings') {
+                    initSettings();
+                }
+            });
+        });
+
+        // ============================================
+        // PONG GAME - L1 Distributed Compute
+        // Physics computed by 10,000+ L1 nodes, not locally!
+        // ============================================
+
+        const pongCanvas = document.getElementById('pongCanvas');
+        const pongCtx = pongCanvas.getContext('2d');
+        const pongStartBtn = document.getElementById('pong-start');
+        const pongResetBtn = document.getElementById('pong-reset');
+        const pongPlayerScoreEl = document.getElementById('pong-player-score');
+        const pongAiScoreEl = document.getElementById('pong-ai-score');
+        const pongStatusEl = document.getElementById('pong-status');
+
+        let pongInitialized = false;
+        let pongRunning = false;
+        let pongPollInterval = null;
+        let pongCurrentInput = 'none'; // Track current input state
+
+        // Game state from backend (L1 computed)
+        let pongState = {
+            ball_x: 400, ball_y: 300,
+            ball_dx: 0, ball_dy: 0,
+            paddle1_y: 250, paddle2_y: 250,
+            score1: 0, score2: 0,
+            game_over: false, winner: 0,
+            field: { width: 800, height: 600, paddle_height: 100, paddle_width: 10, ball_size: 10 }
+        };
+
+        function initPong() {
+            if (pongInitialized) return;
+            pongInitialized = true;
+
+            // Set canvas size based on field dimensions
+            pongCanvas.width = 800;
+            pongCanvas.height = 600;
+
+            const wrapper = pongCanvas.parentElement;
+            const maxWidth = Math.min(800, wrapper.clientWidth - 32);
+            const maxHeight = Math.min(600, wrapper.clientHeight - 32);
+            const scale = Math.min(maxWidth / 800, maxHeight / 600);
+            pongCanvas.style.width = `${800 * scale}px`;
+            pongCanvas.style.height = `${600 * scale}px`;
+
+            // Keyboard controls - send to backend
+            document.addEventListener('keydown', handlePongKeyDown);
+            document.addEventListener('keyup', handlePongKeyUp);
+
+            // Initial draw
+            drawPong();
+
+            // Check if game already running on backend
+            fetchPongState();
+        }
+
+        function handlePongKeyDown(e) {
+            if (!pongRunning) return;
+            if (e.key === 'ArrowUp' || e.key === 'w') {
+                if (pongCurrentInput !== 'up') {
+                    pongCurrentInput = 'up';
+                    sendPongInput('up');
+                }
+            } else if (e.key === 'ArrowDown' || e.key === 's') {
+                if (pongCurrentInput !== 'down') {
+                    pongCurrentInput = 'down';
+                    sendPongInput('down');
+                }
+            }
+        }
+
+        function handlePongKeyUp(e) {
+            if (!pongRunning) return;
+            if ((e.key === 'ArrowUp' || e.key === 'w') && pongCurrentInput === 'up') {
+                pongCurrentInput = 'none';
+                sendPongInput('none');
+            } else if ((e.key === 'ArrowDown' || e.key === 's') && pongCurrentInput === 'down') {
+                pongCurrentInput = 'none';
+                sendPongInput('none');
+            }
+        }
+
+        async function sendPongInput(input) {
+            try {
+                await fetch(`${getApiBase()}/pong/input`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ player: 1, input: input })
+                });
+            } catch (err) {
+                console.error('[Pong] Input error:', err);
+            }
+        }
+
+        async function fetchPongState() {
+            try {
+                const res = await fetch(`${getApiBase()}/pong/state`);
+                const data = await res.json();
+
+                if (data.running) {
+                    // Update local state from backend
+                    pongState = {
+                        ball_x: data.ball_x,
+                        ball_y: data.ball_y,
+                        ball_dx: data.ball_dx,
+                        ball_dy: data.ball_dy,
+                        paddle1_y: data.paddle1_y,
+                        paddle2_y: data.paddle2_y,
+                        score1: data.score1,
+                        score2: data.score2,
+                        game_over: data.game_over,
+                        winner: data.winner,
+                        field: data.field || pongState.field
+                    };
+
+                    // Update score display
+                    pongPlayerScoreEl.textContent = pongState.score1;
+                    pongAiScoreEl.textContent = pongState.score2;
+
+                    if (pongState.game_over) {
+                        pongStatusEl.textContent = `Game Over! Player ${pongState.winner} wins!`;
+                        pongStartBtn.textContent = 'Start';
+                        pongRunning = false;
+                        if (pongPollInterval) {
+                            clearInterval(pongPollInterval);
+                            pongPollInterval = null;
+                        }
+                    } else {
+                        pongStatusEl.textContent = 'L1 Compute Active - Use arrow keys';
+                    }
+                } else {
+                    pongStatusEl.textContent = data.message || 'Press Start to play';
+                }
+
+                drawPong();
+            } catch (err) {
+                console.error('[Pong] State fetch error:', err);
+                pongStatusEl.textContent = 'Connecting to L1 network...';
+            }
+        }
+
+        function drawPong() {
+            const ctx = pongCtx;
+            const w = pongCanvas.width;   // 800
+            const h = pongCanvas.height;  // 600
+            const f = pongState.field;    // { width: 256, height: 128, ... }
+
+            // Scale game coords (256x128) to canvas coords (800x600)
+            const scaleX = w / f.width;   // 3.125
+            const scaleY = h / f.height;  // 4.6875
+
+            // Clear
+            ctx.fillStyle = 'rgba(13, 58, 92, 0.9)';
+            ctx.fillRect(0, 0, w, h);
+
+            // Center line
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.setLineDash([10, 10]);
+            ctx.beginPath();
+            ctx.moveTo(w / 2, 0);
+            ctx.lineTo(w / 2, h);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // L1 compute indicator
+            if (pongRunning) {
+                ctx.fillStyle = 'rgba(78, 205, 196, 0.3)';
+                ctx.font = '10px JetBrains Mono';
+                ctx.fillText('L1 DISTRIBUTED COMPUTE', 10, h - 10);
+            }
+
+            // Player 1 paddle (left - teal) - SCALED
+            ctx.fillStyle = '#4ecdc4';
+            ctx.shadowColor = '#4ecdc4';
+            ctx.shadowBlur = 10;
+            ctx.fillRect(
+                f.paddle_width * scaleX,
+                pongState.paddle1_y * scaleY,
+                f.paddle_width * scaleX,
+                f.paddle_height * scaleY
+            );
+
+            // Player 2 paddle (right - red, AI controlled by L1 network) - SCALED
+            ctx.fillStyle = '#ff6b6b';
+            ctx.shadowColor = '#ff6b6b';
+            ctx.fillRect(
+                w - f.paddle_width * 2 * scaleX,
+                pongState.paddle2_y * scaleY,
+                f.paddle_width * scaleX,
+                f.paddle_height * scaleY
+            );
+
+            // Ball - SCALED
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = '#ffffff';
+            ctx.shadowBlur = 15;
+            ctx.beginPath();
+            ctx.arc(
+                pongState.ball_x * scaleX,
+                pongState.ball_y * scaleY,
+                f.ball_size * Math.min(scaleX, scaleY),  // Keep ball circular
+                0, Math.PI * 2
+            );
+            ctx.fill();
+
+            ctx.shadowBlur = 0;
+
+            // Score display on canvas
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.font = '48px JetBrains Mono';
+            ctx.textAlign = 'center';
+            ctx.fillText(pongState.score1, w / 4, 60);
+            ctx.fillText(pongState.score2, 3 * w / 4, 60);
+            ctx.textAlign = 'left';
+        }
+
+        async function startPong() {
+            if (pongRunning) {
+                // Stop the game
+                try {
+                    await fetch(`${getApiBase()}/pong/stop`, { method: 'POST' });
+                } catch (err) {
+                    console.error('[Pong] Stop error:', err);
+                }
+                pongRunning = false;
+                pongStartBtn.textContent = 'Start';
+                pongStatusEl.textContent = 'Stopped';
+                if (pongPollInterval) {
+                    clearInterval(pongPollInterval);
+                    pongPollInterval = null;
+                }
+            } else {
+                // Start the game via backend (L1 compute)
+                pongStatusEl.textContent = 'Starting L1 compute...';
+                try {
+                    const res = await fetch(`${getApiBase()}/pong/start`, { method: 'POST' });
+                    const data = await res.json();
+
+                    if (data.status === 'started') {
+                        pongRunning = true;
+                        pongStartBtn.textContent = 'Stop';
+                        pongStatusEl.textContent = 'L1 Compute Active - Use arrow keys';
+
+                        // Start polling backend for state (100ms = 10 FPS, matches backend tick rate)
+                        pongPollInterval = setInterval(fetchPongState, 100);
+                    } else {
+                        pongStatusEl.textContent = data.message || 'Failed to start';
+                    }
+                } catch (err) {
+                    console.error('[Pong] Start error:', err);
+                    pongStatusEl.textContent = 'Error connecting to L1 network';
+                }
+            }
+        }
+
+        async function resetPong() {
+            try {
+                await fetch(`${getApiBase()}/pong/reset`, { method: 'POST' });
+                pongPlayerScoreEl.textContent = '0';
+                pongAiScoreEl.textContent = '0';
+                pongStatusEl.textContent = 'Game reset';
+                fetchPongState();
+            } catch (err) {
+                console.error('[Pong] Reset error:', err);
+            }
+        }
+
+        pongStartBtn.addEventListener('click', startPong);
+        pongResetBtn.addEventListener('click', resetPong);
+
+        // ============================================
+        // ARB DASHBOARD
+        // ============================================
+
+        const arbRoutesEl = document.getElementById('arb-routes');
+        const arbPoolsEl = document.getElementById('arb-pools');
+        const arbGraphEl = document.getElementById('arb-graph');
+        const arbTxsEl = document.getElementById('arb-txs');
+        const arbBestProfitEl = document.getElementById('arb-best-profit');
+        const arbRoutesFoundEl = document.getElementById('arb-routes-found');
+        const arbRoutesExploredEl = document.getElementById('arb-routes-explored');
+        const arbTotalPressureEl = document.getElementById('arb-total-pressure');
+        const arbCollapsesEl = document.getElementById('arb-collapses');
+        const arbStatusEl = document.getElementById('arb-status');
+        const arbChainsEl = document.getElementById('arb-chains');
+        const arbGraphCanvas = document.getElementById('arbGraphCanvas');
+        const arbGraphCtx = arbGraphCanvas.getContext('2d');
+
+        let arbInitialized = false;
+        let arbPollInterval = null;
+        let arbRouteHistory = [];
+        let arbPressureHistory = [];
+
+        function initArb() {
+            if (arbInitialized) return;
+            arbInitialized = true;
+
+            // Set graph canvas size
+            arbGraphCanvas.width = arbGraphCanvas.parentElement.clientWidth;
+            arbGraphCanvas.height = arbGraphCanvas.parentElement.clientHeight;
+
+            // Start polling
+            fetchArbStats();
+            arbPollInterval = setInterval(fetchArbStats, 2000);
+        }
+
+        async function fetchArbStats() {
+            try {
+                const res = await fetch(`${getApiBase()}/arb/stats`);
+                const data = await res.json();
+
+                updateArbStats(data);
+
+                // Also fetch recent routes
+                const routesRes = await fetch(`${getApiBase()}/arb/routes`);
+                const routesData = await routesRes.json();
+                updateArbRoutes(routesData.routes || []);
+
+            } catch (err) {
+                // API might not exist yet
+                arbStatusEl.textContent = 'Connecting to arb service...';
+                arbStatusEl.classList.remove('active');
+            }
+        }
+
+        function updateArbStats(stats) {
+            if (!stats) return;
+
+            // Top row - system status
+            arbPoolsEl.textContent = (stats.pools_discovered || 0).toLocaleString();
+            arbGraphEl.textContent = `${stats.graph_nodes || 0}/${stats.graph_edges || 0}`;
+            arbTxsEl.textContent = (stats.txs_processed || 0).toLocaleString();
+            const bestBPS = stats.best_profit_bps || 0;
+            arbBestProfitEl.textContent = `${bestBPS} bps`;
+            if (bestBPS > 0) {
+                arbBestProfitEl.classList.add('positive');
+            } else {
+                arbBestProfitEl.classList.remove('positive');
+            }
+
+            // Bottom row - neural stats
+            arbRoutesFoundEl.textContent = (stats.routes_found || 0).toLocaleString();
+            arbRoutesExploredEl.textContent = (stats.routes_explored || 0).toLocaleString();
+            arbTotalPressureEl.textContent = (stats.total_pressure || 0).toFixed(3);
+            arbCollapsesEl.textContent = (stats.pressure_collapses || 0).toLocaleString();
+
+            // Update status
+            const statusText = stats.pools_discovered > 0
+                ? `Active: ${stats.pools_discovered} pools, ${stats.graph_edges || 0} edges`
+                : 'Neural Explorer Active';
+            arbStatusEl.textContent = statusText;
+            arbStatusEl.classList.add('active');
+
+            // Track pressure history for graph
+            arbPressureHistory.push({
+                time: Date.now(),
+                pressure: stats.total_pressure || 0
+            });
+            if (arbPressureHistory.length > 60) {
+                arbPressureHistory.shift();
+            }
+
+            drawArbGraph();
+        }
+
+        function updateArbRoutes(routes) {
+            if (!routes || routes.length === 0) {
+                if (arbRoutesEl.querySelector('.arb-route') === null) {
+                    // Keep empty state
+                    return;
+                }
+            }
+
+            // Clear and rebuild
+            arbRoutesEl.innerHTML = '';
+
+            if (routes.length === 0) {
+                arbRoutesEl.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">~</div>
+                        <div class="empty-state-text">Waiting for arbitrage routes...</div>
+                    </div>
+                `;
+                return;
+            }
+
+            routes.slice(0, 10).forEach(route => {
+                const routeEl = document.createElement('div');
+                routeEl.className = 'arb-route';
+
+                const profitBPS = route.profit_bps || route.ProfitBPS || 0;
+                const profitPercent = (profitBPS / 100).toFixed(2);
+                const hops = route.hops || route.Hops || [];
+
+                let hopsHtml = '';
+                if (hops.length > 0) {
+                    hopsHtml = hops.map((hop, i) => {
+                        const token = hop.token_in || hop.TokenIn || '???';
+                        const tokenShort = typeof token === 'string' ? token.slice(0, 6) + '...' : token;
+                        return `<span class="arb-hop">${tokenShort}</span>` +
+                               (i < hops.length - 1 ? '<span class="arb-hop-arrow">→</span>' : '');
+                    }).join('');
+                } else {
+                    hopsHtml = `<span class="arb-hop">Chain ${route.start_chain || route.StartChain || '?'}</span>`;
+                }
+
+                const routeId = route.id || route.ID || '';
+                const idShort = typeof routeId === 'string' ? routeId.slice(0, 8) :
+                               (Array.isArray(routeId) ? routeId.slice(0, 4).map(b => b.toString(16).padStart(2, '0')).join('') : '');
+
+                routeEl.innerHTML = `
+                    <div class="arb-route-header">
+                        <span class="arb-route-id">${idShort}...</span>
+                        <span class="arb-route-profit ${profitBPS > 0 ? 'positive' : ''}">${profitBPS > 0 ? '+' : ''}${profitPercent}%</span>
+                    </div>
+                    <div class="arb-route-hops">${hopsHtml}</div>
+                    <div class="arb-route-meta">
+                        <span>Hops: ${hops.length || '?'}</span>
+                        <span>Chain: ${route.start_chain || route.StartChain || '?'}</span>
+                    </div>
+                `;
+
+                arbRoutesEl.appendChild(routeEl);
+            });
+        }
+
+        function drawArbGraph() {
+            const ctx = arbGraphCtx;
+            const w = arbGraphCanvas.width;
+            const h = arbGraphCanvas.height;
+
+            // Clear
+            ctx.fillStyle = 'rgba(13, 58, 92, 0.5)';
+            ctx.fillRect(0, 0, w, h);
+
+            if (arbPressureHistory.length < 2) return;
+
+            // Find max pressure for scaling
+            const maxPressure = Math.max(...arbPressureHistory.map(p => p.pressure), 0.1);
+
+            // Draw grid
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 5; i++) {
+                const y = (h / 5) * i;
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(w, y);
+                ctx.stroke();
+            }
+
+            // Draw pressure line
+            ctx.strokeStyle = '#a29bfe';
+            ctx.lineWidth = 2;
+            ctx.shadowColor = '#a29bfe';
+            ctx.shadowBlur = 5;
+            ctx.beginPath();
+
+            arbPressureHistory.forEach((point, i) => {
+                const x = (w / (arbPressureHistory.length - 1)) * i;
+                const y = h - (point.pressure / maxPressure) * (h - 10);
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Draw current value
+            const lastPressure = arbPressureHistory[arbPressureHistory.length - 1];
+            if (lastPressure) {
+                ctx.fillStyle = '#a29bfe';
+                ctx.font = '10px JetBrains Mono';
+                ctx.fillText(lastPressure.pressure.toFixed(3), w - 50, 15);
+            }
+        }
+
+        // ============================================
+        // REWARDS VIEW
+        // ============================================
+
+        let rewardsPollInterval = null;
+
+        function initRewards() {
+            if (rewardsPollInterval) return;
+            fetchRewardsData();
+            rewardsPollInterval = setInterval(fetchRewardsData, 5000);
+        }
+
+        async function fetchRewardsData() {
+            try {
+                const res = await fetch(`${getApiBase()}/rewards/stats`);
+                const data = await res.json();
+
+                document.getElementById('rewards-epoch').textContent = data.current_epoch ?? '-';
+                document.getElementById('rewards-duration').textContent = data.epoch_duration ?? '-';
+                document.getElementById('rewards-contributors').textContent = data.contributor_count ?? '-';
+                document.getElementById('rewards-accumulated').textContent = data.accumulated_revenue ?? '-';
+                document.getElementById('rewards-pool-pending').textContent = data.pool_pending_revenue ?? '-';
+
+                // Fetch history
+                const histRes = await fetch(`${getApiBase()}/rewards/history`);
+                const histData = await histRes.json();
+                updateEpochHistory(histData.epochs || []);
+
+            } catch (err) {
+                console.error('[Rewards] Fetch error:', err);
+            }
+        }
+
+        function updateEpochHistory(epochs) {
+            const container = document.getElementById('epoch-history');
+            if (epochs.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-text">No epoch history yet</div></div>';
+                return;
+            }
+
+            container.innerHTML = epochs.slice(-10).reverse().map(ep => `
+                <div class="epoch-row">
+                    <span class="epoch-number">Epoch ${ep.epoch}</span>
+                    <span class="epoch-contributors">${ep.contributors} contributors</span>
+                    <span class="epoch-revenue">${ep.total_revenue}</span>
+                </div>
+            `).join('');
+        }
+
+        // ============================================
+        // SETTINGS VIEW
+        // ============================================
+
+        let settingsInitialized = false;
+
+        function initSettings() {
+            if (settingsInitialized) return;
+            settingsInitialized = true;
+
+            fetchSettingsData();
+
+            // Chain salt backup button
+            document.getElementById('backup-chain-salt').addEventListener('click', async () => {
+                const display = document.getElementById('chain-salt-display');
+                if (display.style.display === 'none') {
+                    try {
+                        const res = await fetch(`${getApiBase()}/identity/chain-salt`);
+                        const data = await res.json();
+                        document.getElementById('chain-salt-value').textContent = data.chain_salt || 'Not available';
+                        display.style.display = 'block';
+                        document.getElementById('backup-chain-salt').textContent = 'Hide Backup Phrase';
+                    } catch (err) {
+                        console.error('[Settings] Chain salt error:', err);
+                    }
+                } else {
+                    display.style.display = 'none';
+                    document.getElementById('backup-chain-salt').textContent = 'Show Backup Phrase';
+                }
+            });
+
+            // Update check button
+            document.getElementById('check-updates').addEventListener('click', async () => {
+                try {
+                    document.getElementById('settings-update-status').textContent = 'Checking...';
+                    await fetch(`${getApiBase()}/update/check`, { method: 'POST' });
+                    setTimeout(fetchUpdateStatus, 1000);
+                } catch (err) {
+                    document.getElementById('settings-update-status').textContent = 'Check failed';
+                }
+            });
+        }
+
+        async function fetchSettingsData() {
+            // Identity
+            try {
+                const res = await fetch(`${getApiBase()}/identity`);
+                const data = await res.json();
+                document.getElementById('settings-fork-id').textContent = data.fork_id || '-';
+                document.getElementById('settings-address').textContent = data.address || '-';
+            } catch (err) {
+                console.error('[Settings] Identity error:', err);
+            }
+
+            // P2P
+            try {
+                const res = await fetch(`${getApiBase()}/p2p`);
+                const data = await res.json();
+                document.getElementById('settings-p2p-status').textContent = data.status || (data.connected ? 'Connected' : 'Disconnected');
+                document.getElementById('settings-peers').textContent = data.peer_count ?? data.peers ?? '-';
+            } catch (err) {
+                document.getElementById('settings-p2p-status').textContent = 'Not available';
+            }
+
+            // Content store
+            try {
+                const res = await fetch(`${getApiBase()}/content/`);
+                const data = await res.json();
+                document.getElementById('settings-chunks').textContent = data.chunks ?? '-';
+                document.getElementById('settings-content-size').textContent = formatBytes(data.total_bytes || 0);
+                document.getElementById('settings-ui-root').textContent = (data.ui_root || '-').slice(0, 16) + '...';
+            } catch (err) {
+                console.error('[Settings] Content error:', err);
+            }
+
+            // Updates
+            fetchUpdateStatus();
+        }
+
+        async function fetchUpdateStatus() {
+            try {
+                const res = await fetch(`${getApiBase()}/update/status`);
+                const data = await res.json();
+                document.getElementById('settings-version').textContent = data.current_version || '0.1.0';
+                document.getElementById('settings-latest').textContent = data.latest_version || '-';
+                if (data.update_available) {
+                    document.getElementById('settings-update-status').textContent = 'Update available!';
+                    document.getElementById('settings-update-status').style.color = 'var(--pauliX)';
+                } else if (data.enabled === false) {
+                    document.getElementById('settings-update-status').textContent = 'Disabled';
+                } else {
+                    document.getElementById('settings-update-status').textContent = data.state || 'Up to date';
+                }
+            } catch (err) {
+                document.getElementById('settings-update-status').textContent = 'Not available';
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Cleanup on view switch
+        window.addEventListener('beforeunload', () => {
+            if (arbPollInterval) clearInterval(arbPollInterval);
+            if (rewardsPollInterval) clearInterval(rewardsPollInterval);
+        });
+    </script>
+</body>
+</html>

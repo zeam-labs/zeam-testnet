@@ -1,5 +1,3 @@
-
-
 package grammar
 
 import (
@@ -7,28 +5,25 @@ import (
 	"strings"
 )
 
-
 type ParsedWord struct {
-	Word     string       
-	Lemma    string       
-	POS      PartOfSpeech 
-	Role     string       
-	Position int          
+	Word     string
+	Lemma    string
+	POS      PartOfSpeech
+	Role     string
+	Position int
 }
-
 
 type ParsedSentence struct {
-	Original    string        
-	Words       []*ParsedWord 
-	Type        SentenceType  
-	Intent      string        
-	Subject     *ParsedWord   
-	Verb        *ParsedWord   
-	Object      *ParsedWord   
-	Concepts    []string      
-	IsComplete  bool          
+	Original    string
+	Words       []*ParsedWord
+	Type        SentenceType
+	Intent      string
+	Subject     *ParsedWord
+	Verb        *ParsedWord
+	Object      *ParsedWord
+	Concepts    []string
+	IsComplete  bool
 }
-
 
 type SentenceType int
 
@@ -40,15 +35,12 @@ const (
 	TypeExclamation
 )
 
-
 type SentenceParser struct {
-	
+
 	POSLookup func(word string) PartOfSpeech
 
-	
-	SynsetLookup func(word string) []string 
+	SynsetLookup func(word string) []string
 }
-
 
 var (
 	questionWords = map[string]bool{
@@ -107,7 +99,6 @@ var (
 		"help": true, "let": true, "please": true,
 	}
 
-	
 	stopWords = map[string]bool{
 		"the": true, "a": true, "an": true, "is": true, "are": true,
 		"was": true, "were": true, "be": true, "been": true, "being": true,
@@ -127,14 +118,12 @@ var (
 	}
 )
 
-
 func NewSentenceParser(posLookup func(string) PartOfSpeech, synsetLookup func(string) []string) *SentenceParser {
 	return &SentenceParser{
 		POSLookup:    posLookup,
 		SynsetLookup: synsetLookup,
 	}
 }
-
 
 func (sp *SentenceParser) Parse(text string) *ParsedSentence {
 	result := &ParsedSentence{
@@ -143,52 +132,42 @@ func (sp *SentenceParser) Parse(text string) *ParsedSentence {
 		Concepts: make([]string, 0),
 	}
 
-	
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return result
 	}
 
-	
 	result.Type = sp.detectSentenceType(text)
 
-	
 	tokens := sp.tokenize(text)
 
-	
 	for i, token := range tokens {
 		word := sp.analyzeWord(token, i, result.Type)
 		result.Words = append(result.Words, word)
 
-		
 		if sp.isContentWord(word) {
 			result.Concepts = append(result.Concepts, strings.ToLower(word.Lemma))
 		}
 	}
 
-	
 	sp.identifyRoles(result)
 
-	
 	result.Intent = sp.detectIntent(result)
 
-	
 	result.IsComplete = result.Subject != nil && result.Verb != nil
 
 	return result
 }
 
-
 func (sp *SentenceParser) tokenize(text string) []string {
-	
+
 	text = strings.TrimRight(text, ".!?")
 
-	
 	rawTokens := strings.Fields(text)
 
 	tokens := make([]string, 0, len(rawTokens))
 	for _, t := range rawTokens {
-		
+
 		t = strings.Trim(t, ",;:\"'")
 		if t != "" {
 			tokens = append(tokens, t)
@@ -197,7 +176,6 @@ func (sp *SentenceParser) tokenize(text string) []string {
 
 	return tokens
 }
-
 
 func (sp *SentenceParser) detectSentenceType(text string) SentenceType {
 	text = strings.TrimSpace(text)
@@ -210,12 +188,10 @@ func (sp *SentenceParser) detectSentenceType(text string) SentenceType {
 
 	firstWord := strings.Trim(fields[0], ",.!?")
 
-	
 	if greetingWords[firstWord] {
 		return TypeGreeting
 	}
 
-	
 	if strings.HasSuffix(text, "?") {
 		return TypeQuestion
 	}
@@ -223,24 +199,20 @@ func (sp *SentenceParser) detectSentenceType(text string) SentenceType {
 		return TypeExclamation
 	}
 
-	
 	if questionWords[firstWord] {
 		return TypeQuestion
 	}
 
-	
 	if auxiliaryVerbs[firstWord] {
 		return TypeQuestion
 	}
 
-	
 	if commandVerbs[firstWord] {
 		return TypeCommand
 	}
 
 	return TypeStatement
 }
-
 
 func (sp *SentenceParser) analyzeWord(word string, position int, sentType SentenceType) *ParsedWord {
 	lower := strings.ToLower(word)
@@ -251,7 +223,6 @@ func (sp *SentenceParser) analyzeWord(word string, position int, sentType Senten
 		Position: position,
 	}
 
-	
 	if determiners[lower] {
 		pw.POS = POS_Determiner
 		return pw
@@ -273,11 +244,10 @@ func (sp *SentenceParser) analyzeWord(word string, position int, sentType Senten
 		return pw
 	}
 	if questionWords[lower] {
-		pw.POS = POS_Pronoun 
+		pw.POS = POS_Pronoun
 		return pw
 	}
 
-	
 	if sp.POSLookup != nil {
 		pos := sp.POSLookup(lower)
 		if pos != "" {
@@ -286,15 +256,13 @@ func (sp *SentenceParser) analyzeWord(word string, position int, sentType Senten
 		}
 	}
 
-	
 	pw.POS = sp.guessPOS(lower, position, sentType)
 
 	return pw
 }
 
-
 func (sp *SentenceParser) guessPOS(word string, position int, sentType SentenceType) PartOfSpeech {
-	
+
 	if strings.HasSuffix(word, "ly") {
 		return POS_Adverb
 	}
@@ -320,37 +288,32 @@ func (sp *SentenceParser) guessPOS(word string, position int, sentType SentenceT
 		return POS_Adjective
 	}
 
-	
 	if position == 0 && sentType == TypeCommand {
 		return POS_Verb
 	}
 
-	
 	return POS_Noun
 }
-
 
 func (sp *SentenceParser) identifyRoles(ps *ParsedSentence) {
 	if len(ps.Words) == 0 {
 		return
 	}
 
-	
 	switch ps.Type {
 	case TypeQuestion:
 		sp.identifyQuestionRoles(ps)
 	case TypeCommand:
 		sp.identifyCommandRoles(ps)
 	case TypeGreeting:
-		
+
 	default:
 		sp.identifyStatementRoles(ps)
 	}
 }
 
-
 func (sp *SentenceParser) identifyStatementRoles(ps *ParsedSentence) {
-	
+
 	verbIndex := -1
 	for i, w := range ps.Words {
 		if w.POS == POS_Verb && verbIndex == -1 {
@@ -361,7 +324,6 @@ func (sp *SentenceParser) identifyStatementRoles(ps *ParsedSentence) {
 		}
 	}
 
-	
 	for i, w := range ps.Words {
 		if i >= verbIndex && verbIndex >= 0 {
 			break
@@ -373,7 +335,6 @@ func (sp *SentenceParser) identifyStatementRoles(ps *ParsedSentence) {
 		}
 	}
 
-	
 	if verbIndex >= 0 {
 		for i := verbIndex + 1; i < len(ps.Words); i++ {
 			w := ps.Words[i]
@@ -386,9 +347,8 @@ func (sp *SentenceParser) identifyStatementRoles(ps *ParsedSentence) {
 	}
 }
 
-
 func (sp *SentenceParser) identifyQuestionRoles(ps *ParsedSentence) {
-	
+
 	startIndex := 0
 	for i, w := range ps.Words {
 		if questionWords[strings.ToLower(w.Word)] || auxiliaryVerbs[strings.ToLower(w.Word)] {
@@ -398,7 +358,6 @@ func (sp *SentenceParser) identifyQuestionRoles(ps *ParsedSentence) {
 		}
 	}
 
-	
 	for i := startIndex; i < len(ps.Words); i++ {
 		w := ps.Words[i]
 		if w.POS == POS_Noun || w.POS == POS_Pronoun {
@@ -408,7 +367,6 @@ func (sp *SentenceParser) identifyQuestionRoles(ps *ParsedSentence) {
 		}
 	}
 
-	
 	for _, w := range ps.Words {
 		if w.POS == POS_Verb {
 			w.Role = "verb"
@@ -417,7 +375,6 @@ func (sp *SentenceParser) identifyQuestionRoles(ps *ParsedSentence) {
 		}
 	}
 
-	
 	foundVerb := false
 	for _, w := range ps.Words {
 		if w.POS == POS_Verb {
@@ -432,16 +389,14 @@ func (sp *SentenceParser) identifyQuestionRoles(ps *ParsedSentence) {
 	}
 }
 
-
 func (sp *SentenceParser) identifyCommandRoles(ps *ParsedSentence) {
-	
+
 	if len(ps.Words) > 0 {
 		ps.Words[0].Role = "verb"
 		ps.Words[0].POS = POS_Verb
 		ps.Verb = ps.Words[0]
 	}
 
-	
 	for i := 1; i < len(ps.Words); i++ {
 		w := ps.Words[i]
 		if w.POS == POS_Noun || w.POS == POS_Pronoun {
@@ -451,7 +406,6 @@ func (sp *SentenceParser) identifyCommandRoles(ps *ParsedSentence) {
 		}
 	}
 
-	
 	implicitSubject := &ParsedWord{
 		Word:     "(you)",
 		Lemma:    "you",
@@ -462,7 +416,6 @@ func (sp *SentenceParser) identifyCommandRoles(ps *ParsedSentence) {
 	ps.Subject = implicitSubject
 }
 
-
 func (sp *SentenceParser) isContentWord(w *ParsedWord) bool {
 	lower := strings.ToLower(w.Lemma)
 	if stopWords[lower] {
@@ -471,11 +424,11 @@ func (sp *SentenceParser) isContentWord(w *ParsedWord) bool {
 	if len(lower) < 3 {
 		return false
 	}
-	
+
 	if w.POS == POS_Preposition {
 		return false
 	}
-	
+
 	switch w.POS {
 	case POS_Noun, POS_Verb, POS_Adjective, POS_Adverb:
 		return true
@@ -483,13 +436,12 @@ func (sp *SentenceParser) isContentWord(w *ParsedWord) bool {
 	return false
 }
 
-
 func (sp *SentenceParser) detectIntent(ps *ParsedSentence) string {
 	switch ps.Type {
 	case TypeGreeting:
 		return "greeting"
 	case TypeQuestion:
-		
+
 		if len(ps.Words) > 0 {
 			firstWord := strings.ToLower(ps.Words[0].Word)
 			switch firstWord {
@@ -513,13 +465,12 @@ func (sp *SentenceParser) detectIntent(ps *ParsedSentence) string {
 	}
 }
 
-
 func (ps *ParsedSentence) GetContentWords() []*ParsedWord {
 	content := make([]*ParsedWord, 0)
 	for _, w := range ps.Words {
 		lower := strings.ToLower(w.Lemma)
 		if !stopWords[lower] && len(lower) >= 3 {
-			
+
 			if w.POS == POS_Preposition || w.POS == POS_Determiner || w.POS == POS_Conjunction {
 				continue
 			}
@@ -528,7 +479,6 @@ func (ps *ParsedSentence) GetContentWords() []*ParsedWord {
 	}
 	return content
 }
-
 
 func (ps *ParsedSentence) GetWordsByPOS(pos PartOfSpeech) []*ParsedWord {
 	words := make([]*ParsedWord, 0)
@@ -539,7 +489,6 @@ func (ps *ParsedSentence) GetWordsByPOS(pos PartOfSpeech) []*ParsedWord {
 	}
 	return words
 }
-
 
 func (ps *ParsedSentence) GetVerbPhrase() string {
 	if ps.Verb == nil {
@@ -554,13 +503,11 @@ func (ps *ParsedSentence) GetVerbPhrase() string {
 	return strings.Join(parts, " ")
 }
 
-
 func (ps *ParsedSentence) GetNounPhrase() string {
 	if ps.Subject == nil {
 		return ""
 	}
 
-	
 	parts := make([]string, 0)
 	for _, w := range ps.Words {
 		if w.Position < ps.Subject.Position && w.POS == POS_Adjective {
@@ -574,7 +521,6 @@ func (ps *ParsedSentence) GetNounPhrase() string {
 
 	return strings.Join(parts, " ")
 }
-
 
 func (ps *ParsedSentence) String() string {
 	var sb strings.Builder
@@ -624,18 +570,15 @@ func (ps *ParsedSentence) String() string {
 	return sb.String()
 }
 
-
 func (ps *ParsedSentence) ExtractTopicConcepts() []string {
 	topics := make([]string, 0)
 	seen := make(map[string]bool)
 
-	
 	if ps.Subject != nil && !stopWords[strings.ToLower(ps.Subject.Lemma)] {
 		topics = append(topics, ps.Subject.Lemma)
 		seen[ps.Subject.Lemma] = true
 	}
 
-	
 	if ps.Object != nil && !stopWords[strings.ToLower(ps.Object.Lemma)] {
 		if !seen[ps.Object.Lemma] {
 			topics = append(topics, ps.Object.Lemma)
@@ -643,7 +586,6 @@ func (ps *ParsedSentence) ExtractTopicConcepts() []string {
 		}
 	}
 
-	
 	for _, w := range ps.Words {
 		if w.POS == POS_Noun && !seen[w.Lemma] && !stopWords[strings.ToLower(w.Lemma)] {
 			topics = append(topics, w.Lemma)
@@ -653,7 +595,6 @@ func (ps *ParsedSentence) ExtractTopicConcepts() []string {
 
 	return topics
 }
-
 
 var sentencePatterns = []struct {
 	pattern *regexp.Regexp
@@ -666,7 +607,6 @@ var sentencePatterns = []struct {
 	{regexp.MustCompile(`(?i)^(thanks|thank you)`), "thanks"},
 	{regexp.MustCompile(`(?i)^(yes|no|ok|okay)`), "acknowledgment"},
 }
-
 
 func MatchPattern(text string) string {
 	for _, sp := range sentencePatterns {

@@ -1,5 +1,3 @@
-
-
 package identity
 
 import (
@@ -13,88 +11,69 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-
 type KeyRotationReason string
 
 const (
-	
+
 	RotationScheduled KeyRotationReason = "scheduled"
-	
+
 	RotationCompromise KeyRotationReason = "compromise"
-	
+
 	RotationUpgrade KeyRotationReason = "upgrade"
-	
+
 	RotationRecovery KeyRotationReason = "recovery"
-	
+
 	RotationMigration KeyRotationReason = "migration"
 )
 
-
 type ContinuityProof struct {
-	
+
 	Version int `json:"version"`
 
-	
 	OldAddress common.Address `json:"old_address"`
 
-	
 	NewAddress common.Address `json:"new_address"`
 
-	
 	ForkID [32]byte `json:"fork_id"`
 
-	
 	RotationNumber int `json:"rotation_number"`
 
-	
 	Reason KeyRotationReason `json:"reason"`
 
-	
 	Timestamp int64 `json:"timestamp"`
 
-	
 	EffectiveAt int64 `json:"effective_at"`
 
-	
 	GracePeriodEnd int64 `json:"grace_period_end"`
 
-	
 	OldKeySignature []byte `json:"old_key_signature"`
 
-	
 	NewKeySignature []byte `json:"new_key_signature"`
 
-	
 	RecoveryProof *RecoveryProof `json:"recovery_proof,omitempty"`
 }
 
-
 type RecoveryProof struct {
-	
+
 	Method RecoveryMethod `json:"method"`
 
-	
 	RecoveryPhraseHash []byte `json:"recovery_phrase_hash,omitempty"`
 
-	
 	SocialRecoverySignatures []SocialRecoverySignature `json:"social_recovery_signatures,omitempty"`
 
-	
 	TimeLockProof *TimeLockProof `json:"time_lock_proof,omitempty"`
 }
-
 
 type RecoveryMethod string
 
 const (
-	
+
 	RecoveryPhrase RecoveryMethod = "phrase"
-	
+
 	RecoverySocial RecoveryMethod = "social"
-	
+
 	RecoveryTimeLock RecoveryMethod = "timelock"
 )
-
 
 type SocialRecoverySignature struct {
 	Guardian  common.Address `json:"guardian"`
@@ -102,18 +81,14 @@ type SocialRecoverySignature struct {
 	Timestamp int64          `json:"timestamp"`
 }
 
-
 type TimeLockProof struct {
-	
+
 	InitiatedAt int64 `json:"initiated_at"`
 
-	
 	LockDuration int64 `json:"lock_duration"`
 
-	
 	InitiationTxHash [32]byte `json:"initiation_tx_hash"`
 }
-
 
 func (cp *ContinuityProof) SignWithOldKey(oldKey *ecdsa.PrivateKey) error {
 	addr := crypto.PubkeyToAddress(oldKey.PublicKey)
@@ -121,7 +96,6 @@ func (cp *ContinuityProof) SignWithOldKey(oldKey *ecdsa.PrivateKey) error {
 		return fmt.Errorf("key address %s does not match old address %s", addr.Hex(), cp.OldAddress.Hex())
 	}
 
-	
 	cp.OldKeySignature = nil
 	cp.NewKeySignature = nil
 	data, err := json.Marshal(cp)
@@ -139,14 +113,12 @@ func (cp *ContinuityProof) SignWithOldKey(oldKey *ecdsa.PrivateKey) error {
 	return nil
 }
 
-
 func (cp *ContinuityProof) SignWithNewKey(newKey *ecdsa.PrivateKey) error {
 	addr := crypto.PubkeyToAddress(newKey.PublicKey)
 	if addr != cp.NewAddress {
 		return fmt.Errorf("key address %s does not match new address %s", addr.Hex(), cp.NewAddress.Hex())
 	}
 
-	
 	oldSig := cp.OldKeySignature
 	cp.NewKeySignature = nil
 	cp.OldKeySignature = nil
@@ -156,7 +128,6 @@ func (cp *ContinuityProof) SignWithNewKey(newKey *ecdsa.PrivateKey) error {
 		return fmt.Errorf("failed to marshal for signing: %w", err)
 	}
 
-	
 	hash := crypto.Keccak256(append(data, oldSig...))
 	sig, err := crypto.Sign(hash, newKey)
 	if err != nil {
@@ -167,14 +138,12 @@ func (cp *ContinuityProof) SignWithNewKey(newKey *ecdsa.PrivateKey) error {
 	return nil
 }
 
-
 func (cp *ContinuityProof) Verify() error {
-	
+
 	if cp.Reason == RotationRecovery {
 		return cp.verifyNewKeyOnly()
 	}
 
-	
 	if len(cp.OldKeySignature) == 0 {
 		return fmt.Errorf("missing old key signature")
 	}
@@ -182,7 +151,6 @@ func (cp *ContinuityProof) Verify() error {
 		return fmt.Errorf("missing new key signature")
 	}
 
-	
 	oldSig := cp.OldKeySignature
 	newSig := cp.NewKeySignature
 	cp.OldKeySignature = nil
@@ -209,7 +177,6 @@ func (cp *ContinuityProof) Verify() error {
 		return fmt.Errorf("old key signature does not match old address")
 	}
 
-	
 	hash = crypto.Keccak256(append(data, oldSig...))
 	pubKey, err = crypto.SigToPub(hash, newSig)
 	if err != nil {
@@ -260,50 +227,38 @@ func (cp *ContinuityProof) verifyNewKeyOnly() error {
 	return nil
 }
 
-
 func (cp *ContinuityProof) IsEffective() bool {
 	return time.Now().Unix() >= cp.EffectiveAt
 }
-
 
 func (cp *ContinuityProof) IsInGracePeriod() bool {
 	now := time.Now().Unix()
 	return now < cp.GracePeriodEnd
 }
 
-
 type KeyRotationManager struct {
 	mu sync.RWMutex
 
-	
 	ForkID [32]byte
 
-	
 	CurrentAddress common.Address
 
-	
 	RotationHistory []*ContinuityProof
 
-	
 	SocialRecoveryGuardians []common.Address
 
-	
 	SocialRecoveryThreshold int
 
-	
 	TimeLockDuration int64
 
-	
 	PendingRecovery *PendingRecovery
 }
-
 
 type PendingRecovery struct {
 	NewAddress  common.Address `json:"new_address"`
 	InitiatedAt int64          `json:"initiated_at"`
 	CanComplete int64          `json:"can_complete"`
 }
-
 
 func NewKeyRotationManager(identity *Identity) *KeyRotationManager {
 	return &KeyRotationManager{
@@ -312,10 +267,9 @@ func NewKeyRotationManager(identity *Identity) *KeyRotationManager {
 		RotationHistory:         make([]*ContinuityProof, 0),
 		SocialRecoveryGuardians: make([]common.Address, 0),
 		SocialRecoveryThreshold: 0,
-		TimeLockDuration:        7 * 24 * 60 * 60, 
+		TimeLockDuration:        7 * 24 * 60 * 60,
 	}
 }
-
 
 func (krm *KeyRotationManager) Rotate(oldKey, newKey *ecdsa.PrivateKey, reason KeyRotationReason, gracePeriodDays int) (*ContinuityProof, error) {
 	krm.mu.Lock()
@@ -343,7 +297,6 @@ func (krm *KeyRotationManager) Rotate(oldKey, newKey *ecdsa.PrivateKey, reason K
 		GracePeriodEnd: now + gracePeriod,
 	}
 
-	
 	if err := proof.SignWithOldKey(oldKey); err != nil {
 		return nil, fmt.Errorf("failed to sign with old key: %w", err)
 	}
@@ -351,18 +304,15 @@ func (krm *KeyRotationManager) Rotate(oldKey, newKey *ecdsa.PrivateKey, reason K
 		return nil, fmt.Errorf("failed to sign with new key: %w", err)
 	}
 
-	
 	if err := proof.Verify(); err != nil {
 		return nil, fmt.Errorf("proof verification failed: %w", err)
 	}
 
-	
 	krm.CurrentAddress = newAddr
 	krm.RotationHistory = append(krm.RotationHistory, proof)
 
 	return proof, nil
 }
-
 
 func (krm *KeyRotationManager) SetupSocialRecovery(guardians []common.Address, threshold int) error {
 	krm.mu.Lock()
@@ -379,7 +329,6 @@ func (krm *KeyRotationManager) SetupSocialRecovery(guardians []common.Address, t
 	krm.SocialRecoveryThreshold = threshold
 	return nil
 }
-
 
 func (krm *KeyRotationManager) InitiateTimeLockRecovery(newAddr common.Address) error {
 	krm.mu.Lock()
@@ -398,7 +347,6 @@ func (krm *KeyRotationManager) InitiateTimeLockRecovery(newAddr common.Address) 
 
 	return nil
 }
-
 
 func (krm *KeyRotationManager) CompleteTimeLockRecovery(newKey *ecdsa.PrivateKey) (*ContinuityProof, error) {
 	krm.mu.Lock()
@@ -428,7 +376,7 @@ func (krm *KeyRotationManager) CompleteTimeLockRecovery(newKey *ecdsa.PrivateKey
 		Reason:         RotationRecovery,
 		Timestamp:      now,
 		EffectiveAt:    now,
-		GracePeriodEnd: now, 
+		GracePeriodEnd: now,
 		RecoveryProof: &RecoveryProof{
 			Method: RecoveryTimeLock,
 			TimeLockProof: &TimeLockProof{
@@ -438,19 +386,16 @@ func (krm *KeyRotationManager) CompleteTimeLockRecovery(newKey *ecdsa.PrivateKey
 		},
 	}
 
-	
 	if err := proof.SignWithNewKey(newKey); err != nil {
 		return nil, fmt.Errorf("failed to sign with new key: %w", err)
 	}
 
-	
 	krm.CurrentAddress = newAddr
 	krm.RotationHistory = append(krm.RotationHistory, proof)
 	krm.PendingRecovery = nil
 
 	return proof, nil
 }
-
 
 func (krm *KeyRotationManager) VerifyChain(genesisAddress common.Address) error {
 	krm.mu.RLock()
@@ -459,22 +404,19 @@ func (krm *KeyRotationManager) VerifyChain(genesisAddress common.Address) error 
 	currentAddr := genesisAddress
 
 	for i, proof := range krm.RotationHistory {
-		
+
 		if proof.RotationNumber != i+1 {
 			return fmt.Errorf("rotation %d has incorrect number %d", i+1, proof.RotationNumber)
 		}
 
-		
 		if proof.OldAddress != currentAddr {
 			return fmt.Errorf("rotation %d: old address mismatch", i+1)
 		}
 
-		
 		if proof.ForkID != krm.ForkID {
 			return fmt.Errorf("rotation %d: fork ID mismatch", i+1)
 		}
 
-		
 		if err := proof.Verify(); err != nil {
 			return fmt.Errorf("rotation %d: %w", i+1, err)
 		}
@@ -482,14 +424,12 @@ func (krm *KeyRotationManager) VerifyChain(genesisAddress common.Address) error 
 		currentAddr = proof.NewAddress
 	}
 
-	
 	if currentAddr != krm.CurrentAddress {
 		return fmt.Errorf("chain does not end at current address")
 	}
 
 	return nil
 }
-
 
 func (krm *KeyRotationManager) GetRotationHistory() []*ContinuityProof {
 	krm.mu.RLock()
@@ -499,7 +439,6 @@ func (krm *KeyRotationManager) GetRotationHistory() []*ContinuityProof {
 	copy(result, krm.RotationHistory)
 	return result
 }
-
 
 func (krm *KeyRotationManager) ExportChain() ([]byte, error) {
 	krm.mu.RLock()
